@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="bus">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Make My Journey - Bus & Train Ticket Booking across India</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2724%27 fill=%27%23d63b44%27/%3E%3Cpath d=%27M25 26h50a8 8 0 0 1 8 8v33H17V34a8 8 0 0 1 8-8Z%27 fill=%27white%27/%3E%3Cpath d=%27M25 34h50v18H25z%27 fill=%27%23fca5a5%27/%3E%3Ccircle cx=%2730%27 cy=%2773%27 r=%277%27 fill=%27%230f172a%27/%3E%3Ccircle cx=%2770%27 cy=%2773%27 r=%277%27 fill=%27%230f172a%27/%3E%3C/svg%3E">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+tailwind.config = { theme: { extend: {
+  colors: { brand: {
+    50:'rgb(var(--b50) / <alpha-value>)',100:'rgb(var(--b100) / <alpha-value>)',500:'rgb(var(--b500) / <alpha-value>)',
+    600:'rgb(var(--b600) / <alpha-value>)',700:'rgb(var(--b700) / <alpha-value>)',800:'rgb(var(--b800) / <alpha-value>)' },
+    navy:{950:'#010409'} },
+  fontFamily: { sans:['Lato','Roboto','sans-serif'], mono:['JetBrains Mono','monospace'] }
+}}};
+</script>
+<style>
+/* Bus mode = redBus/AbhiBus red. Train mode = MakeMyTrip blue. */
+:root{--b50:254 242 243;--b100:253 226 228;--b500:232 90 98;--b600:214 59 68;--b700:183 40 49;--b800:140 30 38;
+  --hero:linear-gradient(120deg,#8f1a24 0%,#d63b44 55%,#ef7a5a 100%)}
+html[data-mode="train"]{--b50:235 246 255;--b100:207 232 255;--b500:64 168 255;--b600:0 140 255;--b700:0 113 214;--b800:0 82 160;
+  --hero:linear-gradient(120deg,#051322 0%,#0b3b78 55%,#008cff 100%)}
+html[data-mode="bus"] .only-train{display:none !important}
+html[data-mode="train"] .only-bus{display:none !important}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{background:#f2f2f2;font-family:Lato,Roboto,system-ui,sans-serif}
+button,input,select,textarea{font-family:inherit}
+.hero{background:var(--hero)}
+.nav-link.active{color:rgb(var(--b600));background:rgb(var(--b50));font-weight:800}
+.fld{border:1px solid #cbd5e1;border-radius:.9rem;background:#fff;padding:.55rem .9rem;display:block;transition:border-color .2s,box-shadow .2s}
+.fld:focus-within{border-color:rgb(var(--b600));box-shadow:0 0 0 3px rgb(var(--b600)/.15)}
+.fld small{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b}
+.fld select,.fld input{width:100%;border:0;outline:0;background:transparent;font-size:1.05rem;font-weight:800;color:#0f172a;padding:.1rem 0;cursor:pointer}
+input:not([type=checkbox]):not([type=radio]):not([type=range]):focus,select:focus{outline:none}
+.page-view{animation:pgIn .35s ease both}
+@keyframes pgIn{from{opacity:.4;transform:translateY(6px)}to{opacity:1;transform:none}}
+.seat-transition{transition:all .15s ease}
+.chip-avail{border:1px solid #cbd5e1;border-radius:.7rem;padding:.4rem .6rem;text-align:left;background:#fff;min-width:118px}
+.chip-avail:hover{border-color:rgb(var(--b600));box-shadow:0 2px 8px rgb(0 0 0/.08)}
+.chip-avail.on{border-color:rgb(var(--b600));background:rgb(var(--b50))}
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:rgb(var(--b600));border-radius:6px}
+@media print{body *{visibility:hidden !important}#printTicketContainer,#printTicketContainer *{visibility:visible !important}
+ #printTicketContainer{position:absolute !important;left:0;top:0;width:100%;margin:0;padding:20px;background:#fff;color:#000}.no-print{display:none !important}}
+</style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+<div id="toastContainer" class="fixed top-5 right-5 z-[60] flex flex-col gap-2 pointer-events-none"></div>
+
+<header class="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <a href="javascript:void(0)" onclick="app.navigate('home')" class="flex items-center gap-2.5">
+      <div class="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center text-white"><i data-lucide="bus" id="logoIcon" class="w-6 h-6"></i></div>
+      <div class="leading-tight"><div class="text-xl font-black text-brand-600 tracking-tight">Make My Journey</div>
+        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest -mt-0.5">Bus &bull; Train &bull; All India</div></div>
+    </a>
+    <nav class="hidden md:flex items-center gap-1 text-sm font-bold text-slate-600">
+      <button data-nav="bus" onclick="app.setMode('bus',true)" class="nav-link px-3.5 py-2 rounded-lg hover:bg-slate-100 flex items-center gap-1.5"><i data-lucide="bus" class="w-4 h-4"></i> Bus Tickets</button>
+      <button data-nav="train" onclick="app.setMode('train',true)" class="nav-link px-3.5 py-2 rounded-lg hover:bg-slate-100 flex items-center gap-1.5"><i data-lucide="train-front" class="w-4 h-4"></i> Train Tickets</button>
+      <button data-nav="offers" onclick="app.navigate('offers')" class="nav-link px-3.5 py-2 rounded-lg hover:bg-slate-100 flex items-center gap-1.5"><i data-lucide="tag" class="w-4 h-4"></i> Offers</button>
+      <button data-nav="my-bookings" onclick="app.navigate('my-bookings')" class="nav-link px-3.5 py-2 rounded-lg hover:bg-slate-100 flex items-center gap-1.5"><i data-lucide="ticket" class="w-4 h-4"></i> My Bookings</button>
+      <button data-nav="admin" onclick="app.navigate('admin')" class="nav-link px-3.5 py-2 rounded-lg hover:bg-slate-100 flex items-center gap-1.5"><i data-lucide="shield-check" class="w-4 h-4"></i> Admin</button>
+    </nav>
+    <div class="hidden sm:flex items-center gap-2" id="userAuthSection"></div>
+    <button onclick="app.toggleMobileMenu()" class="md:hidden p-2 rounded-lg hover:bg-slate-100"><i data-lucide="menu" class="w-6 h-6"></i></button>
+  </div>
+  <div id="mobileMenu" class="hidden md:hidden border-t border-slate-200 bg-white px-4 py-3 space-y-1 text-sm font-bold">
+    <button onclick="app.setMode('bus',true);app.toggleMobileMenu()" class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-50">Bus Tickets</button>
+    <button onclick="app.setMode('train',true);app.toggleMobileMenu()" class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-50">Train Tickets</button>
+    <button onclick="app.navigate('offers');app.toggleMobileMenu()" class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-50">Offers</button>
+    <button onclick="app.navigate('my-bookings');app.toggleMobileMenu()" class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-50">My Bookings</button>
+    <button onclick="app.navigate('admin');app.toggleMobileMenu()" class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-50">Admin Panel</button>
+    <div id="mobileAuthContainer" class="pt-2 border-t border-slate-100 flex gap-2"></div>
+  </div>
+</header>
+
+<main class="flex-grow">
+
+<!-- ============ HOME ============ -->
+<section id="page-home" class="page-view">
+  <div class="hero text-white pt-10 pb-32 sm:pt-14 sm:pb-36 relative overflow-hidden">
+    <div class="absolute inset-0 opacity-10" style="background-image:radial-gradient(#fff 1px,transparent 1px);background-size:22px 22px"></div>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative text-center">
+      <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 backdrop-blur border border-white/20 text-xs sm:text-sm font-bold mb-5"><i data-lucide="map" class="w-4 h-4"></i> Pan-India routes &bull; Live route map &bull; Demo booking</div>
+      <h1 id="heroTitle" class="text-3xl sm:text-5xl font-black tracking-tight">Book Bus Tickets Across India</h1>
+      <p id="heroSub" class="mt-3 text-base sm:text-lg text-white/85 max-w-2xl mx-auto"></p>
+    </div>
+  </div>
+
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 -mt-24 relative z-20">
+    <div class="bg-white rounded-2xl shadow-xl shadow-slate-900/10 border border-slate-100 p-4 sm:p-6">
+      <div class="flex justify-center -mt-12 sm:-mt-14 mb-4">
+        <div class="inline-flex bg-white rounded-2xl shadow-lg border border-slate-100 p-1.5 gap-1">
+          <button type="button" data-tab="bus" onclick="app.setMode('bus')" class="mode-tab px-5 sm:px-8 py-2.5 rounded-xl font-black text-sm flex items-center gap-2"><i data-lucide="bus" class="w-5 h-5"></i> Bus</button>
+          <button type="button" data-tab="train" onclick="app.setMode('train')" class="mode-tab px-5 sm:px-8 py-2.5 rounded-xl font-black text-sm flex items-center gap-2"><i data-lucide="train-front" class="w-5 h-5"></i> Train</button>
+        </div>
+      </div>
+      <form id="busSearchForm" novalidate class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+          <label class="fld md:col-span-3"><small>From</small><select id="searchFrom" aria-label="From city" onchange="app.onCityChange()"></select></label>
+          <div class="md:col-span-1 flex justify-center -my-1 md:my-0">
+            <button type="button" onclick="app.swapCities()" title="Swap" class="w-10 h-10 rounded-full border border-slate-200 bg-white text-brand-600 hover:rotate-180 transition-all duration-300 shadow flex items-center justify-center"><i data-lucide="arrow-left-right" class="w-4 h-4"></i></button>
+          </div>
+          <label class="fld md:col-span-3"><small>To</small><select id="searchTo" aria-label="To city" onchange="app.onCityChange()"></select></label>
+          <label class="fld md:col-span-3"><small>Journey Date</small><input type="date" id="searchDate" required></label>
+          <div class="md:col-span-2"><button type="submit" class="w-full py-4 rounded-full bg-gradient-to-r from-brand-500 to-brand-700 text-white font-black text-base shadow-lg shadow-brand-600/30 hover:brightness-110 flex items-center justify-center gap-2"><i data-lucide="search" class="w-5 h-5"></i> Search</button></div>
+        </div>
+        <div class="only-train grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label class="fld"><small>Class</small><select id="searchClass"><option value="ALL">All Classes</option><option value="SL">Sleeper (SL)</option><option value="3A">AC 3 Tier (3A)</option><option value="2A">AC 2 Tier (2A)</option><option value="1A">AC First (1A)</option><option value="CC">AC Chair Car (CC)</option><option value="EC">Exec. Chair Car (EC)</option><option value="2S">Second Sitting (2S)</option></select></label>
+          <label class="fld"><small>Quota</small><select id="searchQuota"><option value="GN">General</option><option value="TQ">Tatkal (+30%)</option><option value="LD">Ladies</option></select></label>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-slate-500">
+          <div class="flex items-center gap-2"><span class="font-bold text-slate-600">Quick:</span>
+            <button type="button" onclick="app.setQuickDate(0)" class="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 font-bold">Today</button>
+            <button type="button" onclick="app.setQuickDate(1)" class="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 font-bold">Tomorrow</button>
+            <button type="button" onclick="app.setQuickDate(7)" class="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 font-bold">Next Week</button></div>
+          <div id="recentSearches" class="flex flex-wrap items-center gap-2"></div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+    <div class="flex items-end justify-between mb-3"><div><h2 class="text-xl font-black text-slate-900" id="homeMapTitle">Your journey on the map</h2><p class="text-sm text-slate-500">Pick any two cities across India - the map updates instantly.</p></div></div>
+    <div id="homeMapHost"></div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div class="mb-6"><h2 class="text-2xl font-black text-slate-900" id="popTitle">Popular Routes</h2><p class="text-sm text-slate-500">Tap a route to search for tomorrow.</p></div>
+    <div id="popularRoutes" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+  </div>
+
+  <div class="bg-white border-y border-slate-200 py-12">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <h2 class="text-2xl font-black text-center text-slate-900" id="featTitle">Why Make My Journey</h2>
+      <div id="featureGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mt-8"></div>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 grid grid-cols-2 lg:grid-cols-4 gap-4 text-center" id="statsBand"></div>
+</section>
+
+<!-- ============ SEARCH RESULTS ============ -->
+<section id="page-search" class="page-view hidden py-6">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="bg-white rounded-2xl border border-slate-200 p-4 mb-5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0"><i data-lucide="route" class="w-5 h-5"></i></div>
+        <div><div class="flex items-center gap-2 flex-wrap"><span id="summaryRoute" class="text-lg font-black text-slate-900"></span><span id="summaryCount" class="text-xs bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded-full"></span></div>
+          <p id="summaryDate" class="text-xs text-slate-500 font-bold"></p></div>
+      </div>
+      <div class="flex items-center gap-2 flex-wrap">
+        <button onclick="app.shiftDate(-1)" class="px-3 py-2 border border-slate-200 hover:bg-slate-50 text-xs font-bold rounded-xl">&larr; Prev Day</button>
+        <button onclick="app.shiftDate(1)" class="px-3 py-2 border border-slate-200 hover:bg-slate-50 text-xs font-bold rounded-xl">Next Day &rarr;</button>
+        <button onclick="app.navigate('home')" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i> Modify Search</button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <aside class="lg:col-span-3">
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-6">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100"><h3 class="font-black text-slate-900 flex items-center gap-2"><i data-lucide="sliders-horizontal" class="w-4 h-4 text-brand-600"></i> Filters</h3>
+            <button onclick="app.resetFilters()" class="text-xs font-bold text-brand-600">Reset All</button></div>
+          <div>
+            <div class="flex justify-between text-xs font-bold text-slate-700 mb-2"><span>Max Price</span><span id="priceLabel" class="text-brand-600 text-sm">₹8000</span></div>
+            <input type="range" id="filterPrice" min="100" max="8000" step="50" value="8000" oninput="app.applyFilters()" class="w-full cursor-pointer" style="accent-color:rgb(var(--b600))">
+          </div>
+          <div class="only-bus"><h4 class="text-xs font-black uppercase tracking-wider text-slate-500 mb-3">Bus Type</h4>
+            <div class="space-y-2 text-sm" id="busTypeFilters"></div></div>
+          <div class="only-train"><h4 class="text-xs font-black uppercase tracking-wider text-slate-500 mb-3">Class</h4>
+            <div class="grid grid-cols-2 gap-2 text-sm" id="trainClassFilters"></div></div>
+          <div class="only-train"><h4 class="text-xs font-black uppercase tracking-wider text-slate-500 mb-3">Train Type</h4>
+            <div class="space-y-2 text-sm" id="trainTypeFilters"></div>
+            <label class="flex items-center gap-2 mt-3 text-sm cursor-pointer"><input type="checkbox" id="filterAvail" onchange="app.applyFilters()" class="h-4 w-4"> Available seats only</label></div>
+          <div><h4 class="text-xs font-black uppercase tracking-wider text-slate-500 mb-3">Departure Time</h4>
+            <div class="grid grid-cols-2 gap-2 text-xs" id="timeFilters"></div></div>
+          <div class="only-bus"><h4 class="text-xs font-black uppercase tracking-wider text-slate-500 mb-3">Bus Operator</h4>
+            <div class="space-y-2 text-sm max-h-56 overflow-auto" id="operatorFilterContainer"></div></div>
+        </div>
+      </aside>
+
+      <div class="lg:col-span-9 space-y-4">
+        <div id="searchMapHost"></div>
+
+        <div class="bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
+          <span class="font-black text-slate-600 uppercase tracking-wider">Sort By</span>
+          <div class="flex flex-wrap gap-1.5" id="sortButtonGroup"></div>
+        </div>
+
+        <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div><p class="font-black text-sm text-slate-800">Compare with live ticket providers</p>
+            <p class="text-xs text-slate-600 mt-1">Schedules here are sample data for the project. Open a provider to check real availability, fares and payment.</p></div>
+          <div class="flex flex-wrap gap-2 shrink-0" id="providerLinks"></div>
+        </div>
+
+        <div id="busCardsContainer" class="space-y-4"></div>
+
+        <div id="noBusesAlert" class="hidden bg-white rounded-2xl border border-slate-200 p-12 text-center">
+          <div class="w-16 h-16 bg-brand-50 text-brand-600 rounded-full flex items-center justify-center mx-auto mb-4"><i data-lucide="search-x" class="w-8 h-8"></i></div>
+          <h3 class="text-lg font-black text-slate-800" id="noResTitle">No sample services found</h3>
+          <p class="text-sm text-slate-500 mt-2 max-w-lg mx-auto" id="noResText"></p>
+          <div class="mt-5 flex flex-wrap justify-center gap-2" id="noResLinks"></div>
+          <button onclick="app.resetFilters()" class="mt-4 text-xs font-bold text-brand-600">Reset filters</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PASSENGERS ============ -->
+<section id="page-passenger" class="page-view hidden py-8">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between mb-8 text-xs font-bold text-slate-400">
+      <div class="flex items-center gap-2 text-brand-600"><span class="w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center">1</span> Select Seats</div>
+      <div class="h-0.5 w-12 bg-brand-600"></div>
+      <div class="flex items-center gap-2 text-brand-600"><span class="w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center">2</span> Passengers</div>
+      <div class="h-0.5 w-12 bg-slate-200"></div>
+      <div class="flex items-center gap-2"><span class="w-6 h-6 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center">3</span> Payment</div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+      <div class="md:col-span-8">
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+          <h3 class="text-lg font-black text-slate-900 flex items-center gap-2 mb-1"><i data-lucide="user-check" class="w-5 h-5 text-brand-600"></i> Passenger Information</h3>
+          <p class="text-xs text-slate-500 mb-5">Enter names exactly as on a government photo ID.</p>
+          <form id="passengerDetailsForm" onsubmit="app.handlePassengerSubmit(event)" class="space-y-6">
+            <div id="dynamicPassengerForms" class="space-y-4"></div>
+            <div class="only-train p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs text-slate-700">
+              <label class="flex items-center gap-2"><input type="checkbox" id="optUpgrade" checked class="h-4 w-4"> Consider for auto-upgradation to a higher class if vacant</label>
+              <label class="flex items-center gap-2"><input type="checkbox" id="optConfirmOnly" class="h-4 w-4"> Book only if confirmed berths are allotted</label>
+            </div>
+            <div class="pt-4 border-t border-slate-100">
+              <h4 class="text-sm font-black text-slate-800 mb-3 flex items-center gap-2"><i data-lucide="mail" class="w-4 h-4 text-slate-500"></i> Ticket delivery & SMS updates</h4>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><label class="block text-xs font-bold text-slate-600 mb-1">Email ID *</label><input type="email" id="contactEmail" required placeholder="name@domain.com" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold"></div>
+                <div><label class="block text-xs font-bold text-slate-600 mb-1">Mobile *</label><input type="tel" id="contactPhone" required pattern="[0-9]{10}" placeholder="10-digit mobile" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold"></div>
+              </div>
+            </div>
+            <div class="pt-4 border-t border-slate-100">
+              <h4 class="text-sm font-black text-slate-800 mb-2 flex items-center gap-2"><i data-lucide="phone-call" class="w-4 h-4 text-brand-600"></i> Emergency contact (optional)</h4>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <input type="text" id="emergencyName" placeholder="Contact person" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm">
+                <input type="tel" id="emergencyPhone" placeholder="Emergency phone" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm">
+              </div>
+            </div>
+            <label class="flex items-start gap-2 p-3 rounded-xl bg-brand-50 border border-brand-100 text-sm cursor-pointer"><input type="checkbox" id="optInsurance" onchange="app.toggleInsurance()" class="h-4 w-4 mt-0.5"><span><b id="insTitle">Travel insurance</b><span id="insText" class="block text-xs text-slate-600"></span></span></label>
+            <label class="flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" id="agreeTerms" required checked class="h-4 w-4"> I confirm all passengers carry valid photo IDs and accept the Terms.</label>
+            <div class="flex justify-between items-center pt-2">
+              <button type="button" onclick="app.navigate('search')" class="px-4 py-2.5 text-xs font-bold text-slate-600 flex items-center gap-1"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>
+              <button type="submit" class="px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-black text-sm rounded-xl shadow-lg shadow-brand-600/25 flex items-center gap-2">Proceed to Payment <i data-lucide="arrow-right" class="w-4 h-4"></i></button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="md:col-span-4"><div id="passengerSummaryCard" class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm sticky top-24 space-y-4"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PAYMENT ============ -->
+<section id="page-payment" class="page-view hidden py-8">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between mb-8 text-xs font-bold text-slate-400">
+      <div class="flex items-center gap-2 text-brand-600"><span class="w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center">&#10003;</span> Seats</div>
+      <div class="h-0.5 w-12 bg-brand-600"></div>
+      <div class="flex items-center gap-2 text-brand-600"><span class="w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center">&#10003;</span> Passengers</div>
+      <div class="h-0.5 w-12 bg-brand-600"></div>
+      <div class="flex items-center gap-2 text-brand-600"><span class="w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center">3</span> Payment</div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+      <div class="md:col-span-7">
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+          <div class="flex items-center justify-between pb-4 border-b border-slate-100"><h3 class="font-black text-slate-900 flex items-center gap-2"><i data-lucide="credit-card" class="w-5 h-5 text-brand-600"></i> Payment Method</h3>
+            <span class="inline-flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold"><i data-lucide="lock" class="w-3 h-3"></i> Demo checkout</span></div>
+          <div class="grid grid-cols-4 gap-2 mt-4 text-xs font-bold">
+            <button type="button" onclick="app.setPaymentTab('upi')" class="payment-tab py-2.5 rounded-xl border" data-tab="upi">UPI / QR</button>
+            <button type="button" onclick="app.setPaymentTab('card')" class="payment-tab py-2.5 rounded-xl border" data-tab="card">Cards</button>
+            <button type="button" onclick="app.setPaymentTab('netbanking')" class="payment-tab py-2.5 rounded-xl border" data-tab="netbanking">Net Banking</button>
+            <button type="button" onclick="app.setPaymentTab('wallets')" class="payment-tab py-2.5 rounded-xl border" data-tab="wallets">Wallets</button>
+          </div>
+          <div id="payment-panel-upi" class="payment-panel pt-6 space-y-4">
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
+              <div class="w-28 h-28 bg-white p-2 rounded-xl border border-slate-200 shrink-0"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=DEMO-PAYMENT-NOT-REAL" alt="Demo QR" class="w-full h-full object-contain"></div>
+              <div><span class="text-xs font-black uppercase tracking-wider text-slate-400">Demo QR</span><h4 class="font-black text-slate-800 text-sm mt-0.5">This QR is a placeholder</h4><p class="text-xs text-slate-500 mt-1">No money moves in this demo. Connect a real gateway (Razorpay, PayU, Cashfree) for live payments.</p></div>
+            </div>
+            <div><label class="block text-xs font-bold text-slate-600 mb-1">UPI ID</label>
+              <div class="flex gap-2"><input type="text" id="upiVpaInput" placeholder="mobile@upi" class="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold"><button type="button" onclick="app.verifyUpi()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl">Verify</button></div></div>
+          </div>
+          <div id="payment-panel-card" class="payment-panel hidden pt-6 space-y-4">
+            <div><label class="block text-xs font-bold text-slate-600 mb-1">Card Number</label><input type="text" maxlength="19" placeholder="Demo only - do not enter a real card" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono"></div>
+            <div class="grid grid-cols-2 gap-3"><input type="text" placeholder="MM/YY" class="px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm"><input type="password" maxlength="3" placeholder="CVV" class="px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm"></div>
+            <input type="text" placeholder="Name on card" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm">
+          </div>
+          <div id="payment-panel-netbanking" class="payment-panel hidden pt-6 space-y-3">
+            <p class="text-xs text-slate-500">Select your bank:</p>
+            <div class="grid grid-cols-3 gap-2 text-xs font-bold">
+              <label class="p-3 border rounded-xl text-center cursor-pointer has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50"><input type="radio" name="bank" checked class="sr-only">HDFC Bank</label>
+              <label class="p-3 border rounded-xl text-center cursor-pointer has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50"><input type="radio" name="bank" class="sr-only">SBI</label>
+              <label class="p-3 border rounded-xl text-center cursor-pointer has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50"><input type="radio" name="bank" class="sr-only">ICICI Bank</label>
+            </div>
+          </div>
+          <div id="payment-panel-wallets" class="payment-panel hidden pt-6 space-y-3">
+            <label class="flex items-center gap-3 p-3.5 border rounded-xl cursor-pointer"><input type="radio" name="wallet" checked> <span class="text-sm font-bold">Paytm Wallet</span></label>
+            <label class="flex items-center gap-3 p-3.5 border rounded-xl cursor-pointer"><input type="radio" name="wallet"> <span class="text-sm font-bold">Amazon Pay</span></label>
+          </div>
+          <div class="mt-6 pt-5 border-t border-slate-100">
+            <label class="block text-xs font-bold text-slate-600 mb-1.5">Coupon / Promo code</label>
+            <div class="flex gap-2"><input type="text" id="promoCodeInput" placeholder="Try MMJ20, FIRSTTRIP, TRAIN100, BUSJOY" class="flex-1 px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-mono font-bold uppercase"><button type="button" onclick="app.applyCoupon()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl">Apply</button></div>
+            <div id="couponMessage" class="text-xs mt-1 font-bold hidden"></div>
+          </div>
+          <div class="mt-6">
+            <button type="button" id="payButtonCta" onclick="app.processDemoPayment()" class="w-full py-4 bg-gradient-to-r from-brand-500 to-brand-700 hover:brightness-110 text-white font-black text-base rounded-xl shadow-lg shadow-brand-600/30 flex items-center justify-center gap-2"><i data-lucide="lock" class="w-5 h-5"></i><span id="payButtonText">Pay ₹0 Now</span></button>
+            <p class="text-[11px] text-center text-slate-400 mt-2">Demo only - no payment is processed and no real ticket is issued.</p>
+          </div>
+        </div>
+      </div>
+      <div class="md:col-span-5"><div id="paymentOrderSummary" class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CONFIRMATION ============ -->
+<section id="page-confirmation" class="page-view hidden py-8">
+  <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center mb-8">
+      <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3"><i data-lucide="check" class="w-8 h-8"></i></div>
+      <h2 class="text-2xl sm:text-3xl font-black text-slate-900" id="confTitle">Booking Confirmed!</h2>
+      <p class="text-sm text-slate-500 mt-1">Demo booking - confirmation SMS/email are simulated.</p>
+    </div>
+    <div id="printTicketContainer" class="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden mb-8"></div>
+    <div class="flex flex-wrap gap-3 justify-center no-print">
+      <button onclick="window.print()" class="px-5 py-2.5 bg-slate-900 hover:bg-black text-white font-bold text-xs rounded-xl flex items-center gap-2"><i data-lucide="printer" class="w-4 h-4"></i> Print Ticket</button>
+      <button onclick="app.navigate('my-bookings')" class="px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-2"><i data-lucide="ticket" class="w-4 h-4"></i> My Bookings</button>
+      <button onclick="app.navigate('home')" class="px-5 py-2.5 bg-brand-50 text-brand-700 hover:bg-brand-100 font-bold text-xs rounded-xl flex items-center gap-2"><i data-lucide="compass" class="w-4 h-4"></i> Book Another Trip</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MY BOOKINGS ============ -->
+<section id="page-my-bookings" class="page-view hidden py-8">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-col lg:flex-row lg:items-center justify-between pb-5 mb-6 border-b border-slate-200 gap-4">
+      <div><h2 class="text-2xl font-black text-slate-900">My Travel Bookings</h2><p class="text-xs text-slate-500 mt-1">Cancel tickets, view e-tickets and check PNR status</p></div>
+      <div class="flex flex-wrap items-center gap-2" id="bookingFilters"></div>
+    </div>
+    <div class="bg-white rounded-2xl border border-slate-200 p-4 mb-5 flex flex-col sm:flex-row gap-3 sm:items-center">
+      <div class="font-black text-sm flex items-center gap-2"><i data-lucide="scan-search" class="w-4 h-4 text-brand-600"></i> Check PNR status</div>
+      <input id="pnrInput" placeholder="Enter PNR" class="flex-1 px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono font-bold uppercase">
+      <button onclick="app.checkPnr()" class="px-4 py-2 bg-brand-600 text-white font-bold text-xs rounded-xl">Check</button>
+      <div id="pnrResult" class="text-xs font-bold text-slate-700"></div>
+    </div>
+    <div id="myBookingsList" class="space-y-4"></div>
+    <div id="noBookingsState" class="hidden bg-white rounded-2xl border border-slate-200 p-12 text-center">
+      <div class="w-16 h-16 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-4"><i data-lucide="ticket-slash" class="w-8 h-8"></i></div>
+      <h3 class="text-lg font-black text-slate-800">No bookings found</h3>
+      <button onclick="app.navigate('home')" class="mt-4 px-5 py-2.5 bg-brand-600 text-white rounded-xl text-xs font-bold">Book now</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ OFFERS ============ -->
+<section id="page-offers" class="page-view hidden py-8">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center max-w-2xl mx-auto mb-10"><span class="px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-black">Coupons for Bus &amp; Train</span>
+      <h2 class="text-3xl font-black text-slate-900 mt-2">Make My Journey Offers</h2><p class="text-slate-500 text-sm mt-1">Copy a code and paste it on the payment page.</p></div>
+    <div id="offersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+  </div>
+</section>
+
+<!-- ============ ADMIN ============ -->
+<section id="page-admin" class="page-view hidden py-8">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200">
+      <div><span class="px-2.5 py-0.5 bg-slate-900 text-white rounded-md text-[10px] font-mono uppercase tracking-wider font-bold">Operations Console</span>
+        <h2 class="text-2xl font-black text-slate-900 mt-1">Bus &amp; Train Management</h2></div>
+      <div class="flex gap-2">
+        <button onclick="app.openAddBusModal()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5"><i data-lucide="plus" class="w-4 h-4"></i> Add Bus</button>
+        <button onclick="app.openAddTrainModal()" class="px-4 py-2 bg-slate-900 hover:bg-black text-white font-bold text-xs rounded-xl flex items-center gap-1.5"><i data-lucide="plus" class="w-4 h-4"></i> Add Train</button>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4" id="adminKpis"></div>
+    <div class="flex gap-2 text-xs font-bold">
+      <button onclick="app.setAdminTab('bus')" id="adminTabBus" class="px-4 py-2 rounded-lg">Bus Fleet</button>
+      <button onclick="app.setAdminTab('train')" id="adminTabTrain" class="px-4 py-2 rounded-lg">Train Timetable</button>
+    </div>
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center"><h3 class="font-black text-slate-800 text-sm" id="adminTableTitle"></h3><span class="text-xs text-slate-400" id="adminTableNote"></span></div>
+      <div class="overflow-x-auto"><table class="w-full text-left text-xs"><thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200" id="adminThead"></thead><tbody id="adminTbody" class="divide-y divide-slate-100 text-slate-700 font-semibold"></tbody></table></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<!-- Add bus -->
+<div id="addBusModal" class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-auto">
+    <div class="flex justify-between items-center pb-3 border-b border-slate-100"><h3 class="font-black text-slate-900">Add Bus Service</h3><button onclick="app.closeModal('addBusModal')"><i data-lucide="x" class="w-5 h-5 text-slate-400"></i></button></div>
+    <form onsubmit="app.handleNewBusSubmit(event)" class="space-y-3 text-xs">
+      <div><label class="block font-bold mb-1">Operator</label><input id="adminBusOperator" required placeholder="e.g. IntrCity SmartBus" class="w-full px-3 py-2 border rounded-xl"></div>
+      <div class="grid grid-cols-2 gap-3"><div><label class="block font-bold mb-1">From</label><select id="adminBusFrom" class="w-full px-3 py-2 border rounded-xl bg-white"></select></div>
+        <div><label class="block font-bold mb-1">To</label><select id="adminBusTo" class="w-full px-3 py-2 border rounded-xl bg-white"></select></div></div>
+      <div class="grid grid-cols-2 gap-3"><div><label class="block font-bold mb-1">Bus Type</label><select id="adminBusType" class="w-full px-3 py-2 border rounded-xl bg-white"></select></div>
+        <div><label class="block font-bold mb-1">Fare (Rs)</label><input type="number" id="adminBusFare" required min="100" max="6000" value="850" class="w-full px-3 py-2 border rounded-xl"></div></div>
+      <div class="grid grid-cols-2 gap-3"><div><label class="block font-bold mb-1">Departure</label><input type="time" id="adminBusDep" required value="21:30" class="w-full px-3 py-2 border rounded-xl"></div>
+        <div><label class="block font-bold mb-1">Duration (hours)</label><input type="number" id="adminBusDur" step="0.25" min="1" max="48" value="8" class="w-full px-3 py-2 border rounded-xl"></div></div>
+      <div class="pt-3 flex justify-end gap-2"><button type="button" onclick="app.closeModal('addBusModal')" class="px-4 py-2 border rounded-xl">Cancel</button><button class="px-5 py-2 bg-brand-600 text-white rounded-xl font-bold">Save</button></div>
+    </form>
+  </div>
+</div>
+<!-- Add train -->
+<div id="addTrainModal" class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-auto">
+    <div class="flex justify-between items-center pb-3 border-b border-slate-100"><h3 class="font-black text-slate-900">Add Train</h3><button onclick="app.closeModal('addTrainModal')"><i data-lucide="x" class="w-5 h-5 text-slate-400"></i></button></div>
+    <form onsubmit="app.handleNewTrainSubmit(event)" class="space-y-3 text-xs">
+      <div class="grid grid-cols-3 gap-3"><div><label class="block font-bold mb-1">Number</label><input id="adminTrNo" required pattern="[0-9]{5}" placeholder="12345" class="w-full px-3 py-2 border rounded-xl"></div>
+        <div class="col-span-2"><label class="block font-bold mb-1">Name</label><input id="adminTrName" required placeholder="Sample Express" class="w-full px-3 py-2 border rounded-xl"></div></div>
+      <div class="grid grid-cols-2 gap-3"><div><label class="block font-bold mb-1">From</label><select id="adminTrFrom" class="w-full px-3 py-2 border rounded-xl bg-white"></select></div>
+        <div><label class="block font-bold mb-1">To</label><select id="adminTrTo" class="w-full px-3 py-2 border rounded-xl bg-white"></select></div></div>
+      <div class="grid grid-cols-3 gap-3"><div><label class="block font-bold mb-1">Type</label><select id="adminTrType" class="w-full px-3 py-2 border rounded-xl bg-white"><option>Express</option><option>Superfast</option><option>Rajdhani</option><option>Shatabdi</option><option>Vande Bharat</option><option>Duronto</option></select></div>
+        <div><label class="block font-bold mb-1">Departure</label><input type="time" id="adminTrDep" required value="18:00" class="w-full px-3 py-2 border rounded-xl"></div>
+        <div><label class="block font-bold mb-1">Duration (h)</label><input type="number" id="adminTrDur" step="0.25" min="1" max="60" value="10" class="w-full px-3 py-2 border rounded-xl"></div></div>
+      <div><label class="block font-bold mb-1">Classes</label><div class="flex flex-wrap gap-3" id="adminTrClasses"></div></div>
+      <div class="pt-3 flex justify-end gap-2"><button type="button" onclick="app.closeModal('addTrainModal')" class="px-4 py-2 border rounded-xl">Cancel</button><button class="px-5 py-2 bg-brand-600 text-white rounded-xl font-bold">Save</button></div>
+    </form>
+  </div>
+</div>
+<!-- Auth -->
+<div id="authModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-md w-full p-6 sm:p-8 shadow-2xl relative">
+    <button onclick="app.closeModal('authModal')" class="absolute top-4 right-4 text-slate-400"><i data-lucide="x" class="w-5 h-5"></i></button>
+    <div class="flex border-b border-slate-200 mb-6 text-sm font-black"><button onclick="app.setAuthTab('login')" id="authTabLogin" class="pb-3 flex-1 border-b-2">Login</button><button onclick="app.setAuthTab('signup')" id="authTabSignup" class="pb-3 flex-1 border-b-2">Register</button></div>
+    <form id="authLoginForm" onsubmit="app.handleAuthSubmit(event,'login')" class="space-y-4">
+      <div><label class="block text-xs font-bold mb-1">Email or phone</label><input id="loginIdentifier" required placeholder="name@domain.com" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm"></div>
+      <div><label class="block text-xs font-bold mb-1">Password</label><input type="password" id="loginPassword" required value="demo1234" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm"></div>
+      <button class="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white font-black rounded-xl text-sm">Sign In (demo)</button>
+    </form>
+    <form id="authSignupForm" onsubmit="app.handleAuthSubmit(event,'signup')" class="space-y-4 hidden">
+      <input id="signupName" required placeholder="Full name" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm">
+      <input type="email" id="signupEmail" required placeholder="Email" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm">
+      <input type="tel" id="signupPhone" required placeholder="Mobile number" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm">
+      <input type="password" id="signupPassword" required minlength="6" placeholder="Password (6+ characters)" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm">
+      <button class="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white font-black rounded-xl text-sm">Create Account</button>
+    </form>
+  </div>
+</div>
+
+<footer class="bg-slate-900 text-slate-400 text-xs mt-16 no-print">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 grid grid-cols-1 md:grid-cols-4 gap-8">
+    <div class="space-y-3"><div class="text-lg font-black text-white">Make My Journey</div><p class="leading-relaxed">Bus and train ticket booking across India. A demo project: schedules, fares and availability are sample data.</p></div>
+    <div><h4 class="text-white font-black text-sm mb-3">Top Bus Routes</h4><ul class="space-y-1.5">
+      <li><a href="javascript:void(0)" onclick="app.quickSearchRoute('bus','Coimbatore','Chennai')" class="hover:text-white">Coimbatore to Chennai</a></li>
+      <li><a href="javascript:void(0)" onclick="app.quickSearchRoute('bus','Delhi','Jaipur')" class="hover:text-white">Delhi to Jaipur</a></li>
+      <li><a href="javascript:void(0)" onclick="app.quickSearchRoute('bus','Mumbai','Pune')" class="hover:text-white">Mumbai to Pune</a></li>
+      <li><a href="javascript:void(0)" onclick="app.quickSearchRoute('bus','Hyderabad','Bangalore')" class="hover:text-white">Hyderabad to Bangalore</a></li></ul></div>
+    <div><h4 class="text-white font-black text-sm mb-3">Top Train Routes</h4><ul class="space-y-1.5">
+      <li><a href="javascript:void(0)" onclick="app.quickSearchRoute('train','Delhi','Mumbai')" class="hover:text-white">Delhi to Mumbai</a></li>
+      <li><a href="javascript:void(0)" onclick="app.quickSearchRoute('train','Chennai','Bangalore')" class="hover:text-white">Chennai to Bangalore</a></li>
+      <li><a href="javascript:void(0)" onclick="app.quickSearchRoute('train','Kolkata','Chennai')" class="hover:text-white">Kolkata to Chennai</a></li>
+      <li><a href="javascript:void(0)" onclick="app.quickSearchRoute('train','Chennai','Madurai')" class="hover:text-white">Chennai to Madurai</a></li></ul></div>
+    <div><h4 class="text-white font-black text-sm mb-3">Support</h4><ul class="space-y-1.5">
+      <li><a href="javascript:void(0)" onclick="app.navigate('offers')" class="hover:text-white">Offers &amp; promo codes</a></li>
+      <li><a href="javascript:void(0)" onclick="app.navigate('my-bookings')" class="hover:text-white">Cancel ticket / PNR status</a></li>
+      <li><a href="javascript:void(0)" onclick="app.showToast('Demo helpline: 1800-000-0000','info')" class="hover:text-white">Customer support</a></li></ul></div>
+  </div>
+  <div class="border-t border-slate-800 text-center text-slate-500 py-4">&copy; 2026 Make My Journey - college/demo project. Not affiliated with redBus, AbhiBus, MakeMyTrip or IRCTC.</div>
+</footer>
+<script>
+/* ===================== DATA LAYER: India cities, trains, helpers ===================== */
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, '0');
+const enc = encodeURIComponent;
+const fmtMin = m => `${Math.floor(m / 60)}h ${pad(m % 60)}m`;
+const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+const minToTime = m => { m = ((m % 1440) + 1440) % 1440; return `${pad(Math.floor(m / 60))}:${pad(m % 60)}`; };
+const isoOf = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const addDaysIso = (s, n) => { const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() + n); return isoOf(d); };
+const rupee = n => '₹' + Math.round(n).toLocaleString('en-IN');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function rng(seed) {
+  let a = typeof seed === 'string' ? hashStr(seed) : seed;
+  return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+function shuffled(arr, r) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+/* [name, state, lat, lng, extras{q: map query, st: railway station query, stn: display station, code}] */
+const CITIES_RAW = [
+  ['Delhi','Delhi',28.61,77.21,{q:'New Delhi',st:'New Delhi Railway Station',stn:'New Delhi',code:'NDLS'}],
+  ['Mumbai','Maharashtra',19.08,72.88,{st:'Mumbai Central',stn:'Mumbai Central',code:'BCT'}],
+  ['Pune','Maharashtra',18.52,73.86,{st:'Pune Junction',code:'PUNE'}],
+  ['Nagpur','Maharashtra',21.15,79.09,{st:'Nagpur Junction',code:'NGP'}],
+  ['Nashik','Maharashtra',19.99,73.79,{}],
+  ['Solapur','Maharashtra',17.66,75.91,{}],
+  ['Kolkata','West Bengal',22.57,88.36,{st:'Howrah Junction',stn:'Howrah',code:'HWH'}],
+  ['Siliguri','West Bengal',26.72,88.43,{st:'New Jalpaiguri Junction',stn:'New Jalpaiguri',code:'NJP'}],
+  ['Chennai','Tamil Nadu',13.08,80.27,{st:'Chennai Central',stn:'Chennai Central',code:'MAS'}],
+  ['Coimbatore','Tamil Nadu',11.02,76.96,{st:'Coimbatore Junction',code:'CBE'}],
+  ['Madurai','Tamil Nadu',9.92,78.12,{st:'Madurai Junction',code:'MDU'}],
+  ['Trichy','Tamil Nadu',10.79,78.69,{q:'Tiruchirappalli',st:'Tiruchirappalli Junction',stn:'Tiruchchirappalli',code:'TPJ'}],
+  ['Salem','Tamil Nadu',11.66,78.15,{st:'Salem Junction',code:'SA'}],
+  ['Erode','Tamil Nadu',11.34,77.72,{st:'Erode Junction',code:'ED'}],
+  ['Tiruppur','Tamil Nadu',11.11,77.34,{code:'TUP'}],
+  ['Tirunelveli','Tamil Nadu',8.73,77.70,{st:'Tirunelveli Junction',code:'TEN'}],
+  ['Thoothukudi','Tamil Nadu',8.76,78.13,{code:'TN'}],
+  ['Thanjavur','Tamil Nadu',10.79,79.14,{st:'Thanjavur Junction',code:'TJ'}],
+  ['Dindigul','Tamil Nadu',10.37,77.98,{st:'Dindigul Junction',code:'DG'}],
+  ['Vellore','Tamil Nadu',12.92,79.13,{st:'Katpadi Junction',stn:'Katpadi Jn',code:'KPD'}],
+  ['Kanchipuram','Tamil Nadu',12.83,79.70,{}],
+  ['Villupuram','Tamil Nadu',11.94,79.49,{st:'Villupuram Junction',code:'VM'}],
+  ['Cuddalore','Tamil Nadu',11.75,79.77,{}],
+  ['Neyveli','Tamil Nadu',11.61,79.49,{}],
+  ['Kumbakonam','Tamil Nadu',10.96,79.38,{}],
+  ['Karur','Tamil Nadu',10.96,78.08,{st:'Karur Junction',code:'KRR'}],
+  ['Namakkal','Tamil Nadu',11.22,78.17,{}],
+  ['Sivakasi','Tamil Nadu',9.45,77.80,{}],
+  ['Ramanathapuram','Tamil Nadu',9.37,78.83,{}],
+  ['Nagercoil','Tamil Nadu',8.18,77.43,{st:'Nagercoil Junction',code:'NCJ'}],
+  ['Kanyakumari','Tamil Nadu',8.09,77.54,{code:'CAPE'}],
+  ['Ooty','Tamil Nadu',11.41,76.70,{q:'Udhagamandalam'}],
+  ['Hosur','Tamil Nadu',12.74,77.83,{}],
+  ['Bangalore','Karnataka',12.97,77.59,{q:'Bengaluru',st:'KSR Bengaluru City Junction',stn:'KSR Bengaluru',code:'SBC'}],
+  ['Mysuru','Karnataka',12.30,76.64,{code:'MYS'}],
+  ['Mangaluru','Karnataka',12.91,74.86,{st:'Mangaluru Central',code:'MAQ'}],
+  ['Kalaburagi','Karnataka',17.33,76.83,{}],
+  ['Raichur','Karnataka',16.21,77.36,{}],
+  ['Hyderabad','Telangana',17.39,78.49,{st:'Secunderabad Junction',stn:'Secunderabad',code:'SC'}],
+  ['Warangal','Telangana',17.97,79.59,{}],
+  ['Vijayawada','Andhra Pradesh',16.51,80.65,{st:'Vijayawada Junction',code:'BZA'}],
+  ['Visakhapatnam','Andhra Pradesh',17.69,83.22,{code:'VSKP'}],
+  ['Rajahmundry','Andhra Pradesh',17.00,81.80,{}],
+  ['Nellore','Andhra Pradesh',14.44,79.99,{}],
+  ['Tirupati','Andhra Pradesh',13.63,79.42,{code:'TPTY'}],
+  ['Kochi','Kerala',9.93,76.27,{st:'Ernakulam Junction',stn:'Ernakulam Jn',code:'ERS'}],
+  ['Thiruvananthapuram','Kerala',8.52,76.94,{st:'Thiruvananthapuram Central',code:'TVC'}],
+  ['Kozhikode','Kerala',11.26,75.78,{code:'CLT'}],
+  ['Thrissur','Kerala',10.53,76.21,{code:'TCR'}],
+  ['Palakkad','Kerala',10.79,76.65,{st:'Palakkad Junction',code:'PGT'}],
+  ['Goa','Goa',15.30,73.96,{q:'Madgaon',st:'Madgaon Junction',stn:'Madgaon',code:'MAO'}],
+  ['Ahmedabad','Gujarat',23.02,72.57,{st:'Ahmedabad Junction',code:'ADI'}],
+  ['Surat','Gujarat',21.17,72.83,{code:'ST'}],
+  ['Vadodara','Gujarat',22.31,73.18,{st:'Vadodara Junction',code:'BRC'}],
+  ['Rajkot','Gujarat',22.30,70.80,{}],
+  ['Jaipur','Rajasthan',26.91,75.79,{st:'Jaipur Junction',code:'JP'}],
+  ['Jodhpur','Rajasthan',26.24,73.02,{st:'Jodhpur Junction',code:'JU'}],
+  ['Udaipur','Rajasthan',24.58,73.71,{}],
+  ['Ajmer','Rajasthan',26.45,74.64,{st:'Ajmer Junction',code:'AII'}],
+  ['Kota','Rajasthan',25.18,75.84,{st:'Kota Junction',code:'KOTA'}],
+  ['Agra','Uttar Pradesh',27.18,78.01,{st:'Agra Cantt',code:'AGC'}],
+  ['Lucknow','Uttar Pradesh',26.85,80.95,{st:'Lucknow Charbagh',code:'LKO'}],
+  ['Kanpur','Uttar Pradesh',26.45,80.35,{st:'Kanpur Central',code:'CNB'}],
+  ['Varanasi','Uttar Pradesh',25.32,83.01,{st:'Varanasi Junction',code:'BSB'}],
+  ['Prayagraj','Uttar Pradesh',25.44,81.85,{st:'Prayagraj Junction',code:'PRYJ'}],
+  ['Jhansi','Uttar Pradesh',25.45,78.57,{st:'Jhansi Junction',code:'JHS'}],
+  ['Amritsar','Punjab',31.63,74.87,{st:'Amritsar Junction',code:'ASR'}],
+  ['Ludhiana','Punjab',30.90,75.86,{st:'Ludhiana Junction',code:'LDH'}],
+  ['Ambala','Haryana',30.38,76.78,{st:'Ambala Cant Junction',code:'UMB'}],
+  ['Chandigarh','Chandigarh',30.73,76.78,{code:'CDG'}],
+  ['Dehradun','Uttarakhand',30.32,78.03,{code:'DDN'}],
+  ['Bhopal','Madhya Pradesh',23.26,77.41,{st:'Bhopal Junction',code:'BPL'}],
+  ['Indore','Madhya Pradesh',22.72,75.86,{st:'Indore Junction',code:'INDB'}],
+  ['Gwalior','Madhya Pradesh',26.22,78.18,{st:'Gwalior Junction',code:'GWL'}],
+  ['Raipur','Chhattisgarh',21.25,81.63,{st:'Raipur Junction',code:'R'}],
+  ['Patna','Bihar',25.59,85.14,{st:'Patna Junction',code:'PNBE'}],
+  ['Gaya','Bihar',24.80,85.00,{st:'Gaya Junction',code:'GAYA'}],
+  ['Ranchi','Jharkhand',23.34,85.31,{code:'RNC'}],
+  ['Dhanbad','Jharkhand',23.80,86.43,{st:'Dhanbad Junction',code:'DHN'}],
+  ['Jamshedpur','Jharkhand',22.80,86.20,{st:'Tatanagar Junction',stn:'Tatanagar Jn',code:'TATA'}],
+  ['Bhubaneswar','Odisha',20.30,85.82,{code:'BBS'}],
+  ['Puri','Odisha',19.81,85.83,{code:'PURI'}],
+  ['Guwahati','Assam',26.14,91.74,{code:'GHY'}]
+];
+const CITY = {};
+CITIES_RAW.forEach(c => { CITY[c[0]] = Object.assign({ name: c[0], state: c[1], lat: c[2], lng: c[3] }, c[4] || {}); });
+const CITY_NAMES = CITIES_RAW.map(c => c[0]);
+const cityQ = n => `${CITY[n].q || n}, ${CITY[n].state}, India`;
+const stationQ = n => `${CITY[n].st || (n + ' Railway Station')}, ${CITY[n].state}, India`;
+const stationName = n => { const c = CITY[n]; return (c.stn || (n + ' Jn')) + (c.code ? ` (${c.code})` : ''); };
+function dist(a, b) {
+  const A = CITY[a], B = CITY[b]; const R = 6371, rad = x => x * Math.PI / 180;
+  const dLat = rad(B.lat - A.lat), dLng = rad(B.lng - A.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(A.lat)) * Math.cos(rad(B.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function cityOptions(selected) {
+  const byState = {}; CITIES_RAW.forEach(c => (byState[c[1]] = byState[c[1]] || []).push(c[0]));
+  return '<option value="" disabled>Select city</option>' + Object.keys(byState).sort().map(s =>
+    `<optgroup label="${s}">${byState[s].sort().map(n => `<option value="${n}"${n === selected ? ' selected' : ''}>${n}</option>`).join('')}</optgroup>`).join('');
+}
+
+/* ---------------- Buses ---------------- */
+const BUS_TYPES = {
+  'AC Sleeper': { rate: 1.9, kind: 'sleeper', spd: 52 },
+  'Volvo Multi-Axle': { rate: 2.2, kind: 'sleeper', spd: 58 },
+  'AC Seater': { rate: 1.35, kind: 'seater', spd: 55 },
+  'Non-AC Sleeper': { rate: 1.25, kind: 'sleeper', spd: 48 },
+  'Non-AC Seater': { rate: 0.95, kind: 'seater', spd: 46 }
+};
+const PRIVATE_OPS = ['VRL Travels','SRS Travels','KPN Travels','Parveen Travels','Orange Travels','IntrCity SmartBus','Neeta Tours','Paulo Travels','Kallada Travels','Sharma Travels','Jabbar Travels','SRM Travels','Raj Express','Patel Tours'];
+const STU = { 'Tamil Nadu':'TNSTC','Karnataka':'KSRTC (Karnataka)','Kerala':'KSRTC (Kerala)','Maharashtra':'MSRTC','Andhra Pradesh':'APSRTC','Telangana':'TSRTC','Gujarat':'GSRTC','Rajasthan':'RSRTC','Uttar Pradesh':'UPSRTC','Punjab':'PRTC','Haryana':'Haryana Roadways','West Bengal':'WBTC','Odisha':'OSRTC','Bihar':'BSRTC','Assam':'ASTC','Goa':'Kadamba (KTCL)','Uttarakhand':'UTC' };
+const STATE_CODE = { 'Tamil Nadu':'TN','Karnataka':'KA','Kerala':'KL','Maharashtra':'MH','Andhra Pradesh':'AP','Telangana':'TS','Gujarat':'GJ','Rajasthan':'RJ','Uttar Pradesh':'UP','Punjab':'PB','Haryana':'HR','Delhi':'DL','West Bengal':'WB','Odisha':'OD','Bihar':'BR','Assam':'AS','Goa':'GA','Uttarakhand':'UK','Madhya Pradesh':'MP','Chhattisgarh':'CG','Jharkhand':'JH','Chandigarh':'CH' };
+const AMEN = { wifi: ['wifi', 'Free WiFi'], charging: ['plug', 'Charging'], blanket: ['bed-double', 'Blanket'], water: ['cup-soda', 'Water'], snack: ['cookie', 'Snacks'], track: ['map-pin', 'GPS Live'] };
+
+const SEED_BUSES = [
+  { id:'B101', operator:'IntrCity SmartBus', busNumber:'TN-38-BZ-4412', type:'AC Sleeper', from:'Coimbatore', to:'Chennai', departureTime:'21:00', durMin:510, boardingPoint:'Gandhipuram Omni Stand', droppingPoint:'Koyambedu CMBT', price:890, rating:4.8, reviewsCount:1420, amenities:['wifi','charging','blanket','water','track'], bookedSeats:['L2','L5','U3','U8'], femaleSeats:['L1','L3','U1'] },
+  { id:'B102', operator:'Orange Travels', busNumber:'AP-02-TC-9801', type:'Volvo Multi-Axle', from:'Coimbatore', to:'Chennai', departureTime:'22:15', durMin:480, boardingPoint:'Hopes College / KMCH', droppingPoint:'Guindy & Koyambedu', price:1150, rating:4.9, reviewsCount:2840, amenities:['wifi','charging','blanket','snack','track'], bookedSeats:['L1','L4','L9','U1','U2','U6'], femaleSeats:['L3','L7'] },
+  { id:'B103', operator:'SRS Travels', busNumber:'KA-01-AK-3309', type:'AC Seater', from:'Coimbatore', to:'Chennai', departureTime:'13:00', durMin:510, boardingPoint:'Gandhipuram SETC Depot', droppingPoint:'Tambaram / Central', price:650, rating:4.3, reviewsCount:910, amenities:['charging','water','track'], bookedSeats:['2A','5C','7B','9D'], femaleSeats:['3A','3B'] },
+  { id:'B104', operator:'KPN Travels', busNumber:'TN-33-MM-1988', type:'Non-AC Sleeper', from:'Coimbatore', to:'Chennai', departureTime:'20:30', durMin:510, boardingPoint:'Lakshmi Mills Junction', droppingPoint:'Ashok Pillar / Koyambedu', price:590, rating:4.2, reviewsCount:650, amenities:['charging','water'], bookedSeats:['L1','L6','U10'], femaleSeats:['L4'] },
+  { id:'B105', operator:'Parveen Travels', busNumber:'TN-07-QQ-5120', type:'AC Sleeper', from:'Coimbatore', to:'Chennai', departureTime:'23:00', durMin:465, boardingPoint:'Omni Bus Stand, Gandhipuram', droppingPoint:'Egmore Railway Station', price:980, rating:4.7, reviewsCount:1820, amenities:['wifi','charging','blanket','water','track'], bookedSeats:['L3','U2','U4','U9'], femaleSeats:['L2','U1'] },
+  { id:'B106', operator:'IntrCity SmartBus', busNumber:'KA-05-JK-1002', type:'Volvo Multi-Axle', from:'Bangalore', to:'Chennai', departureTime:'06:30', durMin:360, boardingPoint:'Madiwala / Electronic City', droppingPoint:'Koyambedu CMBT', price:750, rating:4.8, reviewsCount:3100, amenities:['wifi','charging','snack','track'], bookedSeats:['L1','L2'], femaleSeats:['L3'] }
+];
+
+function generateBuses(from, to, count) {
+  const km = Math.max(30, Math.round(dist(from, to) * 1.25));
+  const r = rng(`bus|${from}|${to}`);
+  const typeKeys = shuffled(Object.keys(BUS_TYPES), r);
+  const ops = shuffled(PRIVATE_OPS, r);
+  const stu = STU[CITY[from].state];
+  const hours = km / 52;
+  const times = hours > 10 ? ['19:30','20:30','21:00','21:45','22:30','23:15'] : hours > 5 ? ['06:30','14:00','18:30','21:00','22:30','23:30'] : ['06:00','08:30','11:00','14:30','17:15','19:45'];
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    let type = typeKeys[i % typeKeys.length];
+    const isStu = stu && i === count - 1;
+    if (isStu) type = r() > .5 ? 'Non-AC Seater' : 'AC Seater';
+    const bt = BUS_TYPES[type];
+    const speed = bt.spd - 4 + r() * 8;
+    const durMin = Math.max(45, Math.round(km / speed * 60 / 5) * 5);
+    const price = Math.max(120, Math.round(km * bt.rate * (0.92 + r() * .18) / 5) * 5);
+    const cd = STATE_CODE[CITY[from].state] || 'IN';
+    const sleeper = bt.kind === 'sleeper';
+    const am = ['charging', 'water', 'track'];
+    if (type.startsWith('AC') || type.startsWith('Volvo')) am.push('wifi');
+    if (sleeper && type !== 'Non-AC Sleeper') am.push('blanket');
+    if (type === 'Volvo Multi-Axle') am.push('snack');
+    out.push({
+      id: `G-${from.slice(0, 3)}${to.slice(0, 3)}-${i}`, generated: true, km,
+      operator: isStu ? stu : ops[i % ops.length],
+      busNumber: `${cd}-${String(10 + Math.floor(r() * 80))}-${String.fromCharCode(65 + Math.floor(r() * 26))}${String.fromCharCode(65 + Math.floor(r() * 26))}-${1000 + Math.floor(r() * 8999)}`,
+      type, from, to, departureTime: times[(i * 2 + Math.floor(r() * 2)) % times.length], durMin,
+      boardingPoint: `${from} Central Bus Stand`, droppingPoint: `${to} Bus Terminal`,
+      price, rating: Number((3.9 + r() * 1.0).toFixed(1)), reviewsCount: 80 + Math.floor(r() * 2800),
+      amenities: am, femaleSeats: sleeper ? ['L1', 'U1', 'L2'] : ['1A', '1B', '2A']
+    });
+  }
+  return out;
+}
+function busLayout(bus) {
+  if (BUS_TYPES[bus.type].kind === 'sleeper') {
+    const L = [], U = []; for (let i = 1; i <= 12; i++) { L.push('L' + i); U.push('U' + i); }
+    return { kind: 'sleeper', decks: [{ title: 'Lower Deck (Berths)', seats: L }, { title: 'Upper Deck (Berths)', seats: U }] };
+  }
+  const rows = []; for (let r = 1; r <= 10; r++) rows.push(['A', 'B', 'C', 'D'].map(l => r + l));
+  return { kind: 'seater', rows };
+}
+function busAllSeats(bus) { const l = busLayout(bus); return l.kind === 'sleeper' ? l.decks.flatMap(d => d.seats) : l.rows.flat(); }
+function busBaseBooked(bus, date) {
+  if (!bus.generated) { const all = new Set(busAllSeats(bus)); return (bus.bookedSeats || []).filter(s => all.has(s)); }
+  const r = rng(`seat|${bus.id}|${date}`); const all = busAllSeats(bus);
+  const n = 3 + Math.floor(r() * 12); return shuffled(all, r).slice(0, n).filter(s => !bus.femaleSeats.includes(s));
+}
+
+/* ---------------- Trains ---------------- */
+const CLS = {
+  SL: { n: 'Sleeper', rate: .55, res: 20, sf: 30, ac: false, min: 100, cap: 150, rac: true, fee: 120 },
+  '3A': { n: 'AC 3 Tier', rate: 1.45, res: 40, sf: 45, ac: true, min: 200, cap: 60, rac: true, fee: 180 },
+  '2A': { n: 'AC 2 Tier', rate: 2.1, res: 50, sf: 45, ac: true, min: 300, cap: 30, rac: true, fee: 200 },
+  '1A': { n: 'AC First', rate: 3.6, res: 60, sf: 75, ac: true, min: 500, cap: 8, rac: false, fee: 240 },
+  CC: { n: 'AC Chair Car', rate: 1.7, res: 40, sf: 45, ac: true, min: 200, cap: 90, rac: false, fee: 180 },
+  EC: { n: 'Exec. Chair Car', rate: 3.3, res: 60, sf: 75, ac: true, min: 500, cap: 12, rac: false, fee: 240 },
+  '2S': { n: 'Second Sitting', rate: .4, res: 15, sf: 15, ac: false, min: 45, cap: 140, rac: false, fee: 60 }
+};
+const COACH = {
+  SL: { prefix: 'S', n: 72, perRow: 8, aisle: 0, types: ['LB', 'MB', 'UB', 'LB', 'MB', 'UB', 'SL', 'SU'], coaches: 2 },
+  '3A': { prefix: 'B', n: 64, perRow: 8, aisle: 0, types: ['LB', 'MB', 'UB', 'LB', 'MB', 'UB', 'SL', 'SU'], coaches: 2 },
+  '2A': { prefix: 'A', n: 48, perRow: 6, aisle: 0, types: ['LB', 'UB', 'LB', 'UB', 'SL', 'SU'], coaches: 2 },
+  '1A': { prefix: 'H', n: 24, perRow: 4, aisle: 0, types: ['LB', 'UB', 'LB', 'UB'], coaches: 1 },
+  CC: { prefix: 'C', n: 80, perRow: 5, aisle: 3, types: ['W', 'M', 'A', 'A', 'W'], coaches: 2 },
+  EC: { prefix: 'E', n: 56, perRow: 4, aisle: 2, types: ['W', 'A', 'A', 'W'], coaches: 1 },
+  '2S': { prefix: 'D', n: 100, perRow: 5, aisle: 3, types: ['W', 'M', 'A', 'A', 'W'], coaches: 2 }
+};
+const TYPE_MULT = { Rajdhani: 1.18, Shatabdi: 1.12, 'Vande Bharat': 1.3, Duronto: 1.15, Superfast: 1.0, Express: 1.0 };
+const SF_TYPES = new Set(['Rajdhani', 'Shatabdi', 'Vande Bharat', 'Duronto', 'Superfast']);
+function trainFare(km, type, cls, quota) {
+  const c = CLS[cls]; let f = Math.max(km * c.rate * (TYPE_MULT[type] || 1), c.min) + c.res + (SF_TYPES.has(type) ? c.sf : 0);
+  if (quota === 'TQ') f *= 1.3;
+  return Math.round(f / 5) * 5;
+}
+
+/* [no, name, type, dep, runs Sun..Sat, classes, 'City:minutes,...', reverse departure (optional -> auto reverse train no+1)] */
+const TRAIN_DEFS = [
+  ['12951','Mumbai Rajdhani Express','Rajdhani','17:00','1111111','1A,2A,3A','Mumbai:0,Surat:195,Vadodara:310,Kota:640,Delhi:935','17:40'],
+  ['12301','Howrah Rajdhani Express','Rajdhani','16:55','1111111','1A,2A,3A','Kolkata:0,Dhanbad:235,Gaya:405,Kanpur:760,Delhi:1030','16:55'],
+  ['12433','Chennai Rajdhani Express','Rajdhani','06:10','1010010','1A,2A,3A','Chennai:0,Vijayawada:395,Warangal:620,Nagpur:940,Bhopal:1240,Jhansi:1440,Agra:1580,Delhi:1700','15:30'],
+  ['22691','Bengaluru Rajdhani Express','Rajdhani','20:00','1001010','1A,2A,3A','Bangalore:0,Hyderabad:565,Nagpur:1015,Bhopal:1355,Jhansi:1570,Agra:1700,Delhi:1860','20:00'],
+  ['12723','Telangana Express','Superfast','06:25','1111111','1A,2A,3A,SL','Hyderabad:0,Warangal:150,Nagpur:520,Bhopal:880,Jhansi:1050,Agra:1250,Delhi:1400','06:00'],
+  ['12621','Tamil Nadu Express','Superfast','22:00','1111111','1A,2A,3A,SL','Chennai:0,Vijayawada:420,Warangal:650,Nagpur:1000,Bhopal:1330,Jhansi:1530,Agra:1680,Delhi:1830','22:30'],
+  ['12841','Coromandel Express','Superfast','14:50','1111111','1A,2A,3A,SL','Kolkata:0,Bhubaneswar:380,Visakhapatnam:840,Vijayawada:1170,Chennai:1590','06:45'],
+  ['12809','Howrah Mumbai Mail','Express','20:05','1111111','1A,2A,3A,SL','Kolkata:0,Jamshedpur:240,Raipur:850,Nagpur:1010,Mumbai:1790','20:30'],
+  ['12345','Saraighat Express','Superfast','15:50','1111111','2A,3A,SL,CC','Kolkata:0,Siliguri:600,Guwahati:1020','15:15'],
+  ['12277','Howrah Puri Shatabdi','Shatabdi','06:05','1111110','CC,EC','Kolkata:0,Bhubaneswar:370,Puri:450','14:05'],
+  ['12009','Mumbai Ahmedabad Shatabdi','Shatabdi','06:25','0111111','CC,EC','Mumbai:0,Surat:195,Vadodara:310,Ahmedabad:435','14:40'],
+  ['12123','Deccan Queen','Superfast','17:10','1111111','CC,2S','Mumbai:0,Pune:195','07:15'],
+  ['10103','Mandovi Express','Express','07:10','1111111','2A,3A,SL,CC,2S','Mumbai:0,Goa:740','09:30'],
+  ['12163','Mumbai Chennai Express','Superfast','20:55','1111111','2A,3A,SL','Mumbai:0,Pune:215,Solapur:460,Raichur:790,Tirupati:1200,Chennai:1320','11:30'],
+  ['11301','Udyan Express','Express','08:05','1111111','2A,3A,SL','Mumbai:0,Pune:215,Solapur:440,Kalaburagi:560,Raichur:735,Bangalore:1285','10:00'],
+  ['12915','Ashram Express','Superfast','17:25','1111111','1A,2A,3A,SL','Ahmedabad:0,Ajmer:570,Jaipur:690,Delhi:900','15:20'],
+  ['12015','Ajmer Shatabdi','Shatabdi','06:05','1111111','CC,EC','Delhi:0,Jaipur:255,Ajmer:395','15:50'],
+  ['12013','Amritsar Shatabdi','Shatabdi','16:30','1111111','CC,EC','Delhi:0,Ambala:150,Ludhiana:255,Amritsar:385','05:10'],
+  ['12011','Kalka Shatabdi','Shatabdi','07:40','1111111','CC,EC','Delhi:0,Ambala:150,Chandigarh:195','17:35'],
+  ['12017','Dehradun Shatabdi','Shatabdi','06:45','1111111','CC,EC','Delhi:0,Dehradun:315','17:15'],
+  ['12001','Bhopal Shatabdi','Shatabdi','06:00','1111111','CC,EC','Delhi:0,Agra:120,Gwalior:190,Jhansi:255,Bhopal:490','14:35'],
+  ['12003','Lucknow Shatabdi','Shatabdi','06:10','0111111','CC,EC','Delhi:0,Kanpur:305,Lucknow:395','15:45'],
+  ['22435','Vande Bharat Express (Delhi - Varanasi)','Vande Bharat','06:00','1011111','CC,EC','Delhi:0,Kanpur:230,Prayagraj:375,Varanasi:480','15:00'],
+  ['12310','Delhi Patna Rajdhani','Rajdhani','17:20','1111111','1A,2A,3A','Delhi:0,Kanpur:295,Prayagraj:400,Patna:730','19:30'],
+  ['12027','Chennai Bangalore Shatabdi','Shatabdi','05:00','1111111','CC,EC','Chennai:0,Vellore:85,Bangalore:310','15:00'],
+  ['12007','Chennai Mysuru Shatabdi','Shatabdi','06:00','1101111','CC,EC','Chennai:0,Vellore:85,Bangalore:310,Mysuru:465','14:45'],
+  ['12639','Brindavan Express','Superfast','07:50','1111111','CC,2S','Chennai:0,Vellore:105,Bangalore:350','15:15'],
+  ['16057','Sapthagiri Express','Express','06:25','1111111','CC,2S','Chennai:0,Tirupati:210','13:20'],
+  ['20643','Chennai Coimbatore Vande Bharat','Vande Bharat','14:20','1111110','CC,EC','Chennai:0,Salem:230,Erode:285,Tiruppur:330,Coimbatore:390','06:00'],
+  ['12675','Kovai Express (Coimbatore - Chennai)','Superfast','06:15','1111111','CC,2S','Coimbatore:0,Tiruppur:55,Erode:105,Salem:165,Vellore:345,Chennai:405'],
+  ['12676','Kovai Express (Chennai - Coimbatore)','Superfast','15:15','1111111','CC,2S','Chennai:0,Vellore:70,Salem:250,Erode:305,Tiruppur:350,Coimbatore:410'],
+  ['12635','Vaigai Express','Superfast','12:25','1111111','CC,2S','Chennai:0,Villupuram:150,Trichy:330,Dindigul:410,Madurai:485','06:40'],
+  ['12637','Pandian Express','Superfast','21:40','1111111','2A,3A,SL','Chennai:0,Villupuram:175,Trichy:380,Dindigul:460,Madurai:520','21:15'],
+  ['12633','Kanniyakumari Express','Superfast','17:20','1111111','2A,3A,SL','Chennai:0,Villupuram:150,Trichy:345,Madurai:520,Tirunelveli:655,Nagercoil:730,Kanyakumari:770','16:30'],
+  ['12693','Pearl City Express','Superfast','19:35','1111111','2A,3A,SL','Chennai:0,Villupuram:150,Trichy:365,Dindigul:440,Madurai:540,Thoothukudi:660','19:10'],
+  ['12605','Pallavan Express','Superfast','15:45','1111111','CC,2S','Chennai:0,Villupuram:130,Trichy:335','09:30'],
+  ['12623','Chennai Thiruvananthapuram Mail','Superfast','19:45','1111111','1A,2A,3A,SL','Chennai:0,Vellore:105,Salem:285,Erode:345,Tiruppur:390,Coimbatore:445,Palakkad:520,Thrissur:610,Kochi:690,Thiruvananthapuram:970','16:00'],
+  ['12601','Chennai Mangaluru Mail','Superfast','20:40','1111111','1A,2A,3A,SL','Chennai:0,Vellore:105,Salem:285,Erode:345,Tiruppur:390,Coimbatore:440,Palakkad:520,Kozhikode:650,Mangaluru:870','15:30'],
+  ['12677','Ernakulam Intercity','Superfast','06:15','1111111','CC,2S','Bangalore:0,Salem:255,Erode:310,Coimbatore:380,Palakkad:445,Thrissur:535,Kochi:625','09:20'],
+  ['12759','Charminar Express','Superfast','18:30','1111111','2A,3A,SL','Hyderabad:0,Warangal:150,Vijayawada:400,Nellore:590,Chennai:735','18:10'],
+  ['12727','Godavari Express','Superfast','17:15','1111111','2A,3A,SL,CC','Visakhapatnam:0,Rajahmundry:210,Vijayawada:400,Warangal:560,Hyderabad:720','17:20'],
+  ['12785','Secunderabad Bangalore Express','Superfast','19:30','1111111','2A,3A,SL','Hyderabad:0,Raichur:300,Bangalore:650','19:30']
+];
+
+function parseTrain(d, rev) {
+  const stops = d[6].split(',').map(s => { const [c, o] = s.split(':'); return { city: c, off: +o }; }).filter(s => CITY[s.city]);
+  return { no: d[0], name: d[1], type: d[2], dep: toMin(d[3]), days: d[4], classes: d[5].split(','), stops, rev: !!rev };
+}
+function buildTrains() {
+  const out = [];
+  TRAIN_DEFS.forEach(d => {
+    const t = parseTrain(d, false); out.push(t);
+    if (d[7]) {
+      const total = t.stops[t.stops.length - 1].off;
+      out.push({ no: String(+d[0] + 1), name: d[1], type: d[2], dep: toMin(d[7]), days: d[4], classes: t.classes,
+        stops: t.stops.slice().reverse().map(s => ({ city: s.city, off: total - s.off })), rev: true });
+    }
+  });
+  return out;
+}
+const TRAINS = buildTrains();
+const BUS_TIME_SLOTS = [['morning', 'sunrise', 'Morning', '6 AM - 12 PM'], ['afternoon', 'sun', 'Afternoon', '12 PM - 6 PM'], ['evening', 'sunset', 'Evening', '6 PM - 11 PM'], ['night', 'moon', 'Night', '11 PM - 6 AM']];
+const slotOf = hhmm => { const h = parseInt(hhmm.split(':')[0], 10); return h >= 6 && h < 12 ? 'morning' : h >= 12 && h < 18 ? 'afternoon' : h >= 18 && h < 23 ? 'evening' : 'night'; };
+
+const COUPONS = {
+  MMJ20: { pct: .2, max: 200, min: 300, modes: ['bus', 'train'], title: '20% OFF', sub: 'Max discount ₹200 on your first booking', tag: 'New User Special', grad: 'from-brand-600 to-brand-500' },
+  FIRSTTRIP: { flat: 150, min: 800, modes: ['bus', 'train'], title: 'FLAT ₹150 OFF', sub: 'On bookings above ₹800', tag: 'Flat Savings', grad: 'from-indigo-600 to-blue-500' },
+  FESTIVE300: { flat: 300, min: 1500, modes: ['bus', 'train'], title: '₹300 OFF', sub: 'On bookings above ₹1500', tag: 'Festival Bonanza', grad: 'from-emerald-600 to-teal-500' },
+  TRAIN100: { flat: 100, min: 600, modes: ['train'], title: '₹100 OFF TRAINS', sub: 'On train bookings above ₹600', tag: 'Train Special', grad: 'from-sky-600 to-cyan-500' },
+  BUSJOY: { flat: 75, min: 500, modes: ['bus'], title: '₹75 OFF BUSES', sub: 'On bus bookings above ₹500', tag: 'Bus Special', grad: 'from-rose-600 to-orange-500' }
+};
+/* ===================== APP CORE: state, navigation, search, maps, results ===================== */
+const STORE_KEY = 'mmj_app_data_v3';
+const todayStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+const trainTypeList = ['Rajdhani', 'Shatabdi', 'Vande Bharat', 'Duronto', 'Superfast', 'Express'];
+
+class MakeMyJourneyApp {
+  constructor() {
+    this.mode = 'bus'; this.page = 'home';
+    this.currentSearch = { from: 'Coimbatore', to: 'Chennai', date: '', cls: 'ALL', quota: 'GN' };
+    this.sort = 'price_asc'; this.sel = null; this.mapTrainNo = null; this.busPool = [];
+    this.adminTab = 'bus'; this.bookingFilter = 'all'; this.bookingMode = 'all'; this.paymentTab = 'upi';
+    this.loadState(); this.init();
+  }
+
+  /* ---------- storage ---------- */
+  loadState() {
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) { d = null; }
+    if (d) {
+      this.bookings = d.bookings || []; this.customBuses = d.customBuses || []; this.customTrains = d.customTrains || [];
+      this.hiddenBuses = d.hiddenBuses || []; this.seatState = d.seatState || {}; this.currentUser = d.currentUser || null; this.recents = d.recents || [];
+    } else {
+      this.bookings = []; this.customBuses = []; this.customTrains = []; this.hiddenBuses = []; this.seatState = {}; this.recents = [];
+      this.currentUser = { name: 'NOBHIN ARTHURS', email: 'passenger@example.com', phone: '9876543210' };
+      this.seedBookings(); this.saveState();
+    }
+  }
+  saveState() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ bookings: this.bookings, customBuses: this.customBuses, customTrains: this.customTrains, hiddenBuses: this.hiddenBuses, seatState: this.seatState, currentUser: this.currentUser, recents: this.recents })); } catch (e) { /* storage blocked */ }
+  }
+  seedBookings() {
+    const t = todayStart();
+    const d1 = isoOf(new Date(t.getTime() + 4 * 864e5)), d2 = isoOf(new Date(t.getTime() + 10 * 864e5));
+    const b = SEED_BUSES[0], arr = this.busArrival(b);
+    this.bookings.push({ pnr: 'MMJ-773412', mode: 'bus', busId: b.id, busOperator: b.operator, busType: b.type, busNumber: b.busNumber, from: b.from, to: b.to, depTime: b.departureTime, arrTime: arr.time, arrPlus: arr.plus, durMin: b.durMin, boardingPoint: b.boardingPoint, droppingPoint: b.droppingPoint, date: d1, passengers: [{ name: 'NOBHIN ARTHURS', age: 29, gender: 'Male', seat: 'L5' }], seats: ['L5'], totalAmount: 934, status: 'confirmed', bookedAt: new Date(Date.now() - 864e5).toISOString() });
+    const km = Math.round(dist('Chennai', 'Madurai') * 1.2), fare = trainFare(km, 'Superfast', 'CC', 'GN');
+    this.bookings.push({ pnr: '2417385906', mode: 'train', trainNo: '12635', trainName: 'Vaigai Express', trainType: 'Superfast', cls: 'CC', quota: 'GN', from: 'Chennai', to: 'Madurai', depTime: '12:25', arrTime: '20:30', arrPlus: 0, durMin: 485, boardingPoint: stationName('Chennai'), droppingPoint: stationName('Madurai'), date: d2, originIso: d2, availKey: `12635|CC|${d2}`, passengers: [{ name: 'NOBHIN ARTHURS', age: 29, gender: 'Male', coach: 'C1', no: 12, berth: 'W', status: 'CNF', seat: 'C1-12' }], seats: ['C1-12'], ticketStatus: 'CNF', totalAmount: Math.round(fare * 1.05 + 35), status: 'confirmed', bookedAt: new Date(Date.now() - 2 * 864e5).toISOString() });
+  }
+  allTrains() { return TRAINS.concat(this.customTrains); }
+  storedBuses() { return SEED_BUSES.filter(b => !this.hiddenBuses.includes(b.id)).concat(this.customBuses); }
+
+  /* ---------- init ---------- */
+  init() {
+    $('searchFrom').innerHTML = cityOptions('Coimbatore'); $('searchTo').innerHTML = cityOptions('Chennai');
+    $('searchFrom').value = 'Coimbatore'; $('searchTo').value = 'Chennai';
+    const dt = $('searchDate'); dt.min = isoOf(todayStart()); dt.value = isoOf(new Date(todayStart().getTime() + 864e5));
+    this.currentSearch.date = dt.value;
+    $('busTypeFilters').innerHTML = Object.keys(BUS_TYPES).map(t => `<label class="flex items-center gap-2.5 cursor-pointer"><input type="checkbox" name="busType" value="${t}" onchange="app.applyFilters()" class="h-4 w-4"><span>${t}</span></label>`).join('');
+    $('trainClassFilters').innerHTML = Object.keys(CLS).map(c => `<label class="flex items-center gap-2 cursor-pointer text-xs"><input type="checkbox" name="trClass" value="${c}" onchange="app.applyFilters()" class="h-4 w-4"><span><b>${c}</b> ${CLS[c].n}</span></label>`).join('');
+    $('trainTypeFilters').innerHTML = trainTypeList.map(t => `<label class="flex items-center gap-2.5 cursor-pointer"><input type="checkbox" name="trType" value="${t}" onchange="app.applyFilters()" class="h-4 w-4"><span>${t}</span></label>`).join('');
+    $('timeFilters').innerHTML = BUS_TIME_SLOTS.map(s => `<label class="p-2 border rounded-xl flex flex-col items-center gap-1 cursor-pointer text-center select-none hover:border-brand-500 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50"><input type="checkbox" name="depTime" value="${s[0]}" onchange="app.applyFilters()" class="sr-only"><i data-lucide="${s[1]}" class="w-4 h-4 text-brand-600"></i><span class="font-bold text-slate-800">${s[2]}</span><span class="text-[10px] text-slate-400">${s[3]}</span></label>`).join('');
+    $('homeMapHost').innerHTML = this.mapPanelHtml('home'); $('searchMapHost').innerHTML = this.mapPanelHtml('search');
+    $('adminBusFrom').innerHTML = cityOptions('Coimbatore'); $('adminBusTo').innerHTML = cityOptions('Chennai');
+    $('adminTrFrom').innerHTML = cityOptions('Chennai'); $('adminTrTo').innerHTML = cityOptions('Madurai');
+    $('adminBusFrom').value = 'Coimbatore'; $('adminBusTo').value = 'Chennai'; $('adminTrFrom').value = 'Chennai'; $('adminTrTo').value = 'Madurai';
+    $('adminBusType').innerHTML = Object.keys(BUS_TYPES).map(t => `<option>${t}</option>`).join('');
+    $('adminTrClasses').innerHTML = Object.keys(CLS).map(c => `<label class="flex items-center gap-1"><input type="checkbox" name="adminTrCls" value="${c}" ${['SL', '3A', '2A'].includes(c) ? 'checked' : ''}> ${c}</label>`).join('');
+    $('busSearchForm').addEventListener('submit', e => this.handleSearchSubmit(e));
+    this.updateAuthUi(); this.applyModeUi(); this.updateRouteMap();
+    if (window.lucide) lucide.createIcons();
+  }
+
+  /* ---------- navigation & mode ---------- */
+  navigate(pageId) {
+    this.page = pageId;
+    document.querySelectorAll('.page-view').forEach(p => p.classList.add('hidden'));
+    const t = $('page-' + pageId); if (t) { t.classList.remove('hidden'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    this.updateNavActive();
+    if (pageId === 'search') this.renderSearchResults();
+    else if (pageId === 'my-bookings') this.renderMyBookings();
+    else if (pageId === 'admin') this.renderAdmin();
+    else if (pageId === 'home') this.renderRecents();
+    if (window.lucide) lucide.createIcons();
+  }
+  updateNavActive() {
+    document.querySelectorAll('.nav-link').forEach(l => {
+      const n = l.dataset.nav; const on = (n === this.page) || (['home', 'search', 'passenger', 'payment', 'confirmation'].includes(this.page) && n === this.mode);
+      l.classList.toggle('active', on);
+    });
+  }
+  toggleMobileMenu() { $('mobileMenu').classList.toggle('hidden'); }
+  setMode(mode, goHome) {
+    this.mode = mode; document.documentElement.dataset.mode = mode;
+    this.sel = null; this.sort = 'price_asc';
+    this.applyModeUi(); this.updateRouteMap();
+    if (goHome) this.navigate('home'); else { this.updateNavActive(); if (this.page === 'search') this.renderSearchResults(); }
+    if (window.lucide) lucide.createIcons();
+  }
+  applyModeUi() {
+    const bus = this.mode === 'bus';
+    document.querySelectorAll('.mode-tab').forEach(b => {
+      const on = b.dataset.tab === this.mode;
+      b.className = 'mode-tab px-5 sm:px-8 py-2.5 rounded-xl font-black text-sm flex items-center gap-2 ' + (on ? 'bg-brand-600 text-white shadow' : 'text-slate-600 hover:bg-slate-100');
+    });
+    $('heroTitle').textContent = bus ? 'Book Bus Tickets Across India' : 'Book Train Tickets Across India';
+    $('heroSub').textContent = bus ? `Intercity and interstate buses between ${CITY_NAMES.length}+ cities - AC sleepers, Volvo coaches and state transport.` : 'Rajdhani, Shatabdi, Vande Bharat and Express trains with class-wise fares, availability, RAC and waitlist status.';
+    $('homeMapTitle').textContent = bus ? 'Your bus route on the map' : 'Your train route on the map';
+    $('popTitle').textContent = bus ? 'Popular Bus Routes' : 'Popular Train Routes';
+    $('featTitle').textContent = bus ? 'Why book buses with Make My Journey' : 'Why book trains with Make My Journey';
+    $('insTitle').textContent = bus ? 'Add travel protection' : 'Add travel insurance';
+    $('insText').textContent = bus ? '₹10 per seat - demo add-on covering trip cancellation.' : '₹1 per passenger - demo add-on covering accidents during the journey.';
+    $('providerLinks').innerHTML = bus
+      ? `<a href="https://www.redbus.in/" target="_blank" rel="noopener noreferrer" class="px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-bold hover:border-brand-500">redBus &#8599;</a><a href="https://www.abhibus.com/" target="_blank" rel="noopener noreferrer" class="px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-bold hover:border-brand-500">AbhiBus &#8599;</a><a href="https://www.makemytrip.com/bus-tickets/" target="_blank" rel="noopener noreferrer" class="px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-bold hover:border-brand-500">MakeMyTrip &#8599;</a>`
+      : `<a href="https://www.irctc.co.in/nget/train-search" target="_blank" rel="noopener noreferrer" class="px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-bold hover:border-brand-500">IRCTC &#8599;</a><a href="https://www.makemytrip.com/railways/" target="_blank" rel="noopener noreferrer" class="px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-bold hover:border-brand-500">MakeMyTrip Trains &#8599;</a>`;
+    $('noResLinks').innerHTML = `<button onclick="app.navigate('home')" class="px-4 py-2.5 bg-brand-600 text-white rounded-xl text-xs font-bold">Change Search</button>` + $('providerLinks').innerHTML;
+    this.renderPopular(); this.renderFeatures(); this.renderStats(); this.renderOffers(); this.renderRecents(); this.renderSortButtons();
+    this.updateNavActive();
+  }
+  renderFeatures() {
+    const F = this.mode === 'bus'
+      ? [['armchair', 'Interactive seat maps', 'Pick lower/upper berths or 2+2 seats with female-reserved indicators.'], ['map', 'All-India route map', 'See the normal road route between any two cities before you book.'], ['qr-code', 'Instant QR e-ticket', 'Digital boarding pass generated right after payment.'], ['refresh-cw', 'Easy cancellation', 'One-click cancel with automatic refund calculation.']]
+      : [['train-front', 'Class-wise availability', 'Live-style AVAILABLE / RAC / WL status for SL, 3A, 2A, 1A, CC, EC and 2S.'], ['route', 'Train route on the map', 'Route drawn through the main junctions with stop-by-stop timings.'], ['armchair', 'Coach and berth selection', 'Choose coach, lower/middle/upper berths or chair-car seats.'], ['scan-search', 'PNR status checker', 'Check your PNR and cancel with IRCTC-style refund rules.']];
+    $('featureGrid').innerHTML = F.map(f => `<div class="bg-slate-50 p-6 rounded-2xl border border-slate-100"><div class="w-12 h-12 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center mb-4"><i data-lucide="${f[0]}" class="w-6 h-6"></i></div><h3 class="font-black text-slate-900">${f[1]}</h3><p class="text-slate-500 text-sm mt-1">${f[2]}</p></div>`).join('');
+  }
+  renderStats() {
+    const states = new Set(CITIES_RAW.map(c => c[1])).size;
+    const S = [[CITY_NAMES.length + '+', 'Cities covered'], [states, 'States & UTs'], [this.allTrains().length, 'Sample trains'], [(CITY_NAMES.length * (CITY_NAMES.length - 1)).toLocaleString('en-IN'), 'Bus route pairs']];
+    $('statsBand').innerHTML = S.map(s => `<div class="bg-white rounded-2xl border border-slate-200 p-5"><div class="text-3xl font-black text-brand-600">${s[0]}</div><div class="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">${s[1]}</div></div>`).join('');
+  }
+  renderPopular() {
+    const R = this.mode === 'bus'
+      ? [['Coimbatore', 'Chennai'], ['Bangalore', 'Chennai'], ['Chennai', 'Madurai'], ['Delhi', 'Jaipur'], ['Mumbai', 'Pune'], ['Hyderabad', 'Bangalore'], ['Kochi', 'Bangalore'], ['Ahmedabad', 'Mumbai']]
+      : [['Delhi', 'Mumbai'], ['Delhi', 'Kolkata'], ['Chennai', 'Bangalore'], ['Chennai', 'Coimbatore'], ['Chennai', 'Madurai'], ['Mumbai', 'Pune'], ['Delhi', 'Varanasi'], ['Kolkata', 'Chennai']];
+    $('popularRoutes').innerHTML = R.map(([f, t]) => {
+      let sub, badge;
+      if (this.mode === 'bus') { const p = this.getBusPool(f, t); sub = `From ${rupee(Math.min(...p.map(b => b.price)))} - ${p.length} buses daily`; badge = fmtMin(Math.min(...p.map(b => b.durMin))); }
+      else { const ps = this.trainsOnPair(f, t); const km = Math.round(dist(f, t) * 1.2); sub = ps.length ? `${ps.length} trains - from ${rupee(Math.min(...ps.flatMap(p => p.t.classes.map(c => trainFare(km, p.t.type, c, 'GN')))))}` : 'Check live schedule'; badge = ps.length ? fmtMin(Math.min(...ps.map(p => p.t.stops[p.j].off - p.t.stops[p.i].off))) : '-'; }
+      return `<div onclick="app.quickSearchRoute('${this.mode}','${f}','${t}')" class="cursor-pointer bg-white p-5 rounded-2xl border border-slate-200 hover:border-brand-500 hover:shadow-lg transition group">
+        <div class="flex justify-between items-start gap-2"><div><h4 class="font-black text-slate-800 group-hover:text-brand-600">${f} &rarr; ${t}</h4><p class="text-xs text-slate-500 mt-1">${sub}</p></div><span class="px-2 py-1 bg-emerald-50 text-emerald-700 text-[11px] font-bold rounded-md whitespace-nowrap">${badge}</span></div>
+        <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500"><span>${esc(CITY[f].state)} &rarr; ${esc(CITY[t].state)}</span><span class="text-brand-600 font-bold group-hover:underline">Search</span></div></div>`;
+    }).join('');
+  }
+  renderOffers() {
+    const rows = Object.entries(COUPONS).map(([code, c]) => `<div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition">
+      <div class="h-32 bg-gradient-to-tr ${c.grad} p-5 text-white flex flex-col justify-between"><span class="text-xs uppercase font-black tracking-wider bg-white/20 w-fit px-2.5 py-0.5 rounded-full">${c.tag}</span>
+      <div><h3 class="text-2xl font-black">${c.title}</h3><p class="text-xs text-white/85">${c.sub}</p></div></div>
+      <div class="p-5 flex items-center justify-between"><div><span class="text-xs text-slate-400 block font-bold">CODE &bull; ${c.modes.join(' & ')}</span><span class="font-mono font-black text-slate-800 text-base">${code}</span></div>
+      <button onclick="app.copyOfferCode('${code}')" class="px-3.5 py-1.5 rounded-xl border border-brand-600 text-brand-600 hover:bg-brand-50 text-xs font-bold">Copy Code</button></div></div>`);
+    $('offersGrid').innerHTML = rows.join('');
+  }
+  copyOfferCode(code) {
+    try { navigator.clipboard.writeText(code); } catch (e) { const t = document.createElement('textarea'); t.value = code; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+    this.showToast(`Copied ${code}. Paste it on the payment page.`, 'success');
+  }
+  renderRecents() {
+    const r = (this.recents || []).filter(x => x.mode === this.mode).slice(0, 4);
+    $('recentSearches').innerHTML = r.length ? '<span class="font-bold text-slate-600">Recent:</span>' + r.map(x => `<button type="button" onclick="app.quickSearchRoute('${x.mode}','${x.from}','${x.to}')" class="px-3 py-1 rounded-full border border-slate-200 hover:border-brand-500 font-bold">${x.from} &rarr; ${x.to}</button>`).join('') : '';
+  }
+
+  /* ---------- search form ---------- */
+  onCityChange() { this.currentSearch.from = $('searchFrom').value; this.currentSearch.to = $('searchTo').value; this.mapTrainNo = null; this.updateRouteMap(); }
+  swapCities() { const f = $('searchFrom'), t = $('searchTo'); const x = f.value; f.value = t.value; t.value = x; this.onCityChange(); }
+  setQuickDate(n) { $('searchDate').value = isoOf(new Date(todayStart().getTime() + n * 864e5)); }
+  quickSearchRoute(mode, from, to) {
+    if (mode !== this.mode) this.setMode(mode);
+    $('searchFrom').value = from; $('searchTo').value = to; this.setQuickDate(1); this.onCityChange(); this.handleSearchSubmit(new Event('submit'));
+  }
+  handleSearchSubmit(e) {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    const from = $('searchFrom').value, to = $('searchTo').value, date = $('searchDate').value;
+    if (!from || !to) { this.showToast('Please choose both cities.', 'warning'); return false; }
+    if (from === to) { this.showToast('Choose two different cities.', 'error'); return false; }
+    if (!date) { this.showToast('Please select the journey date.', 'warning'); return false; }
+    if (new Date(date + 'T00:00:00') < todayStart()) { this.showToast('Choose today or a future date.', 'warning'); return false; }
+    this.currentSearch = { from, to, date, cls: $('searchClass').value, quota: $('searchQuota').value };
+    this.mapTrainNo = null; this.resetFilters(false);
+    this.recents = [{ mode: this.mode, from, to }].concat((this.recents || []).filter(r => !(r.mode === this.mode && r.from === from && r.to === to))).slice(0, 8); this.saveState();
+    this.busPool = this.mode === 'bus' ? this.getBusPool(from, to) : [];
+    if (this.mode === 'bus') this.renderOperatorFilters();
+    this.navigate('search'); return true;
+  }
+  shiftDate(n) {
+    const nd = addDaysIso(this.currentSearch.date, n);
+    if (new Date(nd + 'T00:00:00') < todayStart()) { this.showToast('Cannot search in the past.', 'warning'); return; }
+    this.currentSearch.date = nd; $('searchDate').value = nd; this.renderSearchResults();
+  }
+
+  /* ---------- maps (Google Maps embed technique kept) ---------- */
+  mapPanelHtml(p) {
+    return `<section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div><div class="flex items-center gap-2 text-slate-900 font-black"><i data-lucide="map" class="w-5 h-5 text-brand-600"></i><span id="${p}MapTitle">Your Journey on the Map</span></div><p id="${p}MapCaption" class="text-sm text-slate-500 mt-1"></p></div>
+        <div class="flex flex-wrap gap-2">
+          <a id="${p}RouteLink" href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold px-4 py-2.5"><i data-lucide="navigation" class="w-4 h-4"></i> Open Route in Google Maps</a>
+          <a id="${p}SatLink" href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-xl border border-slate-200 hover:border-brand-500 text-slate-700 text-xs font-bold px-4 py-2.5"><i data-lucide="satellite" class="w-4 h-4"></i> Satellite View</a>
+          <a id="${p}TransitLink" href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer" class="only-train inline-flex items-center gap-2 rounded-xl border border-slate-200 hover:border-brand-500 text-slate-700 text-xs font-bold px-4 py-2.5"><i data-lucide="train-front" class="w-4 h-4"></i> Rail / Transit View</a>
+        </div></div>
+      <div id="${p}Stops" class="hidden px-4 sm:px-5 pb-3 overflow-x-auto"></div>
+      <div class="relative bg-slate-100"><iframe id="${p}MapFrame" title="Google Maps route preview" class="w-full h-[300px] sm:h-[390px] border-0" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://maps.google.com/maps?output=embed&q=India"></iframe>
+      <div class="px-4 py-3 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-500">Directions are provided by Google Maps. Choose Satellite for aerial imagery. Routes and travel times change with traffic and road conditions; train paths are drawn through main junctions and are an approximation of the rail corridor.</div></div></section>`;
+  }
+  trainsOnPair(from, to) {
+    const res = [];
+    this.allTrains().forEach(t => { const i = t.stops.findIndex(s => s.city === from), j = t.stops.findIndex(s => s.city === to); if (i >= 0 && j > i) res.push({ t, i, j }); });
+    return res;
+  }
+  updateRouteMap() {
+    const { from, to } = this.currentSearch; if (!CITY[from] || !CITY[to]) return;
+    let info;
+    if (this.mode === 'bus') {
+      const o = cityQ(from), d = cityQ(to), km = Math.round(dist(from, to) * 1.25);
+      const base = `https://www.google.com/maps/dir/?api=1&origin=${enc(o)}&destination=${enc(d)}&travelmode=driving`;
+      info = { title: 'Your Bus Route on the Map', embed: `https://maps.google.com/maps?saddr=${enc(o)}&daddr=${enc(d)}&output=embed&t=k`, dir: base, sat: base + '&basemap=satellite', transit: base,
+        caption: `${from} → ${to} - normal road route, approx. ${km} km (about ${fmtMin(Math.round(km / 52 * 60))} by bus). Check Google Maps for live traffic.`, stops: null };
+    } else {
+      const cands = this.trainsOnPair(from, to); let pick = cands.find(c => c.t.no === this.mapTrainNo) || cands[0];
+      const o = stationQ(from), d = stationQ(to);
+      let vias = [], stops = null, cap;
+      if (pick) {
+        const mid = pick.t.stops.slice(pick.i + 1, pick.j); const step = Math.max(1, Math.ceil(mid.length / 5));
+        vias = mid.filter((_, k) => k % step === 0).slice(0, 5).map(s => stationQ(s.city));
+        stops = pick.t.stops.slice(pick.i, pick.j + 1).map(s => ({ city: s.city, time: minToTime(pick.t.dep + s.off) }));
+        cap = `${pick.t.no} ${pick.t.name}: ${stops.map(s => s.city).join(' → ')}. Path is drawn through the main junctions.`;
+      } else cap = `${from} → ${to}: no sample direct train. Showing the corridor between the two stations; use Rail / Transit View for real options.`;
+      const daddr = vias.concat([d]).map(enc).join('+to:');
+      const base = `https://www.google.com/maps/dir/?api=1&origin=${enc(o)}&destination=${enc(d)}${vias.length ? '&waypoints=' + vias.map(enc).join('%7C') : ''}`;
+      info = { title: 'Your Train Route on the Map', embed: `https://maps.google.com/maps?saddr=${enc(o)}&daddr=${daddr}&output=embed&t=k`, dir: base + '&travelmode=driving', sat: base + '&travelmode=driving&basemap=satellite',
+        transit: `https://www.google.com/maps/dir/?api=1&origin=${enc(o)}&destination=${enc(d)}&travelmode=transit`, caption: cap, stops };
+    }
+    ['home', 'search'].forEach(p => {
+      const fr = $(p + 'MapFrame'); if (fr && fr.getAttribute('src') !== info.embed) fr.src = info.embed;
+      $(p + 'MapTitle').textContent = info.title; $(p + 'MapCaption').textContent = info.caption;
+      $(p + 'RouteLink').href = info.dir; $(p + 'SatLink').href = info.sat; $(p + 'TransitLink').href = info.transit;
+      const st = $(p + 'Stops');
+      if (info.stops) { st.classList.remove('hidden'); st.innerHTML = '<div class="flex items-center gap-1 text-xs min-w-max">' + info.stops.map((s, k) => `${k ? '<span class="text-slate-300">&mdash;</span>' : ''}<span class="px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 font-bold">${s.city} <span class="font-mono text-slate-500">${s.time}</span></span>`).join('') + '</div>'; }
+      else { st.classList.add('hidden'); st.innerHTML = ''; }
+    });
+  }
+  showTrainOnMap(no) { this.mapTrainNo = no; this.updateRouteMap(); const m = $('searchMapHost'); if (m) m.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+
+  /* ---------- filters / sort ---------- */
+  checked(name) { return Array.from(document.querySelectorAll(`input[name="${name}"]:checked`)).map(e => e.value); }
+  applyFilters() { $('priceLabel').textContent = '₹' + $('filterPrice').value; this.renderSearchResults(); }
+  resetFilters(render = true) {
+    $('filterPrice').value = 8000; $('priceLabel').textContent = '₹8000'; $('filterAvail').checked = false;
+    ['busType', 'depTime', 'operator', 'trClass', 'trType'].forEach(n => document.querySelectorAll(`input[name="${n}"]`).forEach(e => e.checked = false));
+    if (render) this.renderSearchResults();
+  }
+  renderOperatorFilters() {
+    $('operatorFilterContainer').innerHTML = [...new Set(this.busPool.map(b => b.operator))].map(op => `<label class="flex items-center gap-2.5 cursor-pointer"><input type="checkbox" name="operator" value="${esc(op)}" onchange="app.applyFilters()" class="h-4 w-4"><span>${esc(op)}</span></label>`).join('');
+  }
+  renderSortButtons() {
+    const opts = [['price_asc', 'Price: Low to High'], ['price_desc', 'Price: High to Low'], ['dep_asc', 'Departure'], ['dur_asc', 'Duration']];
+    if (this.mode === 'bus') opts.push(['rating_desc', 'Top Rated']);
+    $('sortButtonGroup').innerHTML = opts.map(o => `<button onclick="app.setSort('${o[0]}')" class="px-3 py-1.5 rounded-lg border ${this.sort === o[0] ? 'border-brand-600 bg-brand-50 text-brand-700 font-bold' : 'border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold'}">${o[1]}</button>`).join('');
+  }
+  setSort(s) { this.sort = s; this.renderSortButtons(); this.renderSearchResults(); }
+
+  /* ---------- buses ---------- */
+  getBusPool(from, to) {
+    const stored = this.storedBuses().filter(b => b.from === from && b.to === to);
+    const need = Math.max(0, 5 - stored.length);
+    return stored.concat(need ? generateBuses(from, to, Math.max(3, need)) : []);
+  }
+  busArrival(b) { const a = toMin(b.departureTime) + b.durMin; return { time: minToTime(a), plus: Math.floor(a / 1440) }; }
+  busBooked(bus, date) { return new Set(busBaseBooked(bus, date).concat(this.seatState[`B|${bus.id}|${date}`] || [])); }
+  filteredBuses() {
+    const max = parseFloat($('filterPrice').value) || 8000, types = this.checked('busType'), slots = this.checked('depTime'), ops = this.checked('operator');
+    let l = this.busPool.filter(b => b.price <= max && (!types.length || types.includes(b.type)) && (!ops.length || ops.includes(b.operator)) && (!slots.length || slots.includes(slotOf(b.departureTime))));
+    const s = this.sort;
+    return l.slice().sort((a, b) => s === 'price_asc' ? a.price - b.price : s === 'price_desc' ? b.price - a.price : s === 'rating_desc' ? b.rating - a.rating : s === 'dur_asc' ? a.durMin - b.durMin : a.departureTime.localeCompare(b.departureTime));
+  }
+  renderBusResults() {
+    const list = this.filteredBuses(), c = $('busCardsContainer'), date = this.currentSearch.date;
+    $('summaryCount').textContent = `${list.length} Buses`;
+    $('noResTitle').textContent = 'No buses match your filters'; $('noResText').textContent = 'Try resetting filters or check live schedules with a ticket provider.';
+    if (!list.length) { c.innerHTML = ''; $('noBusesAlert').classList.remove('hidden'); return; }
+    $('noBusesAlert').classList.add('hidden');
+    c.innerHTML = list.map(bus => {
+      const arr = this.busArrival(bus), booked = this.busBooked(bus, date), total = busAllSeats(bus).length, avail = total - booked.size;
+      return `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition overflow-hidden"><div class="p-5 sm:p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
+          <div><div class="flex items-center gap-2 flex-wrap"><h3 class="text-lg font-black text-slate-900">${esc(bus.operator)}</h3>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${bus.rating >= 4.5 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}"><i data-lucide="star" class="w-3 h-3 fill-current"></i> ${bus.rating}</span><span class="text-xs text-slate-400">(${bus.reviewsCount})</span></div>
+            <p class="text-xs text-slate-500 font-semibold mt-0.5">${bus.type} &bull; Coach #${esc(bus.busNumber)}</p></div>
+          <div class="sm:text-right"><span class="text-xs text-slate-400 block">Starting from</span><div class="text-2xl font-black text-slate-900">${rupee(bus.price)}</div></div></div>
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 py-4 items-center">
+          <div class="sm:col-span-3"><div class="text-xl font-black text-slate-900">${bus.departureTime}</div><div class="text-xs font-bold text-slate-700">${bus.from}</div><div class="text-[11px] text-slate-400 truncate">${esc(bus.boardingPoint)}</div></div>
+          <div class="sm:col-span-4 text-center"><span class="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">${fmtMin(bus.durMin)}</span>
+            <div class="flex items-center my-1"><div class="h-px w-full bg-slate-200"></div><i data-lucide="bus" class="w-4 h-4 mx-2 text-brand-600 shrink-0"></i><div class="h-px w-full bg-slate-200"></div></div><span class="text-[11px] text-slate-400">${bus.generated ? '~' + bus.km + ' km' : 'Direct Express'}</span></div>
+          <div class="sm:col-span-3 sm:text-right"><div class="text-xl font-black text-slate-900">${arr.time}${arr.plus ? `<sup class="text-[10px] text-rose-500 font-bold"> +${arr.plus}d</sup>` : ''}</div><div class="text-xs font-bold text-slate-700">${bus.to}</div><div class="text-[11px] text-slate-400 truncate">${esc(bus.droppingPoint)}</div></div>
+          <div class="sm:col-span-2 sm:text-right"><button onclick="app.toggleBusSeats('${bus.id}')" class="w-full sm:w-auto px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 sm:ml-auto">Select Seats <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i></button></div></div>
+        <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div class="flex flex-wrap items-center gap-3 text-slate-500">${(bus.amenities || []).map(a => AMEN[a] ? `<span class="flex items-center gap-1"><i data-lucide="${AMEN[a][0]}" class="w-3.5 h-3.5 text-brand-600"></i> ${AMEN[a][1]}</span>` : '').join('')}</div>
+          <div><span class="font-black ${avail < 6 ? 'text-rose-600' : 'text-emerald-600'}">${avail} Seats Available</span><span class="text-slate-400 text-[11px] ml-1">(${bus.femaleSeats.length} female reserved)</span></div></div></div>
+        <div id="seatContainer_${bus.id}" class="hidden border-t border-slate-200 bg-slate-50 p-5 sm:p-6"></div></div>`;
+    }).join('');
+  }
+
+  /* ---------- trains ---------- */
+  buildTrainResult(t, i, j, journeyIso) {
+    const f = t.stops[i], to = t.stops[j], depAbs = t.dep + f.off, arrAbs = t.dep + to.off, dayShift = Math.floor(depAbs / 1440);
+    const originIso = addDaysIso(journeyIso, -dayShift), wd = new Date(originIso + 'T00:00:00').getDay();
+    return { t, i, j, dep: minToTime(depAbs), arr: minToTime(arrAbs), arrPlus: Math.floor(arrAbs / 1440) - dayShift, durMin: to.off - f.off,
+      km: Math.max(20, Math.round(dist(f.city, to.city) * 1.2)), originIso, journeyIso, runs: t.days[wd] === '1' };
+  }
+  trainAvail(r, cls) {
+    const key = `${r.t.no}|${cls}|${r.originIso}`, daysAhead = Math.floor((new Date(r.journeyIso + 'T00:00:00') - todayStart()) / 864e5);
+    if (daysAhead > 120) return { st: 'NOTOPEN', n: daysAhead - 120, key };
+    const g = rng('av|' + key), prob = daysAhead > 25 ? .8 : daysAhead > 7 ? .62 : .42, x = g(), c = CLS[cls];
+    let st, n0;
+    if (x < prob) { st = 'AVAILABLE'; n0 = 1 + Math.floor(g() * c.cap); }
+    else if (x < prob + .12 && c.rac) { st = 'RAC'; n0 = 1 + Math.floor(g() * 18); }
+    else { st = 'WL'; n0 = 1 + Math.floor(g() * (daysAhead > 7 ? 40 : 70)); }
+    const used = (this.seatState['T|' + key] || []).length; let n = n0;
+    if (st === 'AVAILABLE') { n = n0 - used; if (n <= 0) { st = 'WL'; n = 1 - n; } }
+    return { st, n, n0, used, key, baseAvail: x < prob };
+  }
+  trainResults() {
+    const { from, to, date, cls: sc } = this.currentSearch, max = parseFloat($('filterPrice').value) || 8000;
+    const types = this.checked('trType'), slots = this.checked('depTime'), picked = this.checked('trClass'), onlyAvail = $('filterAvail').checked;
+    const want = picked.length ? picked : (sc && sc !== 'ALL' ? [sc] : null);
+    let l = this.trainsOnPair(from, to).map(p => this.buildTrainResult(p.t, p.i, p.j, date));
+    l = l.map(r => { r.shown = r.t.classes.filter(c => !want || want.includes(c)); r.minFare = r.shown.length ? Math.min(...r.shown.map(c => trainFare(r.km, r.t.type, c, this.currentSearch.quota))) : 0; return r; })
+      .filter(r => r.shown.length && r.minFare <= max && (!types.length || types.includes(r.t.type)) && (!slots.length || slots.includes(slotOf(r.dep))) && (!onlyAvail || (r.runs && r.shown.some(c => this.trainAvail(r, c).st === 'AVAILABLE'))));
+    const s = this.sort;
+    return l.sort((a, b) => (b.runs - a.runs) || (s === 'price_asc' ? a.minFare - b.minFare : s === 'price_desc' ? b.minFare - a.minFare : s === 'dur_asc' ? a.durMin - b.durMin : toMin(a.dep) - toMin(b.dep)));
+  }
+  availBadge(a) {
+    if (a.st === 'NOTOPEN') return { txt: `Opens in ${a.n}d`, cls: 'text-slate-500' };
+    if (a.st === 'AVAILABLE') return { txt: `AVAILABLE ${a.n}`, cls: 'text-emerald-600' };
+    if (a.st === 'RAC') return { txt: `RAC ${a.n}`, cls: 'text-amber-600' };
+    return { txt: `WL ${a.n}`, cls: 'text-rose-600' };
+  }
+  renderTrainResults() {
+    const list = this.trainResults(), c = $('busCardsContainer'), q = this.currentSearch.quota;
+    $('summaryCount').textContent = `${list.length} Trains`;
+    $('noResTitle').textContent = 'No sample trains found';
+    $('noResText').textContent = 'This project has sample timetables for major corridors only. Try nearby major cities, reset filters, or check live trains on IRCTC.';
+    if (!list.length) { c.innerHTML = ''; $('noBusesAlert').classList.remove('hidden'); return; }
+    $('noBusesAlert').classList.add('hidden');
+    c.innerHTML = list.map(r => {
+      const t = r.t, f = t.stops[r.i].city, to = t.stops[r.j].city;
+      const days = DAY_NAMES.map((d, k) => `<span class="${t.days[k] === '1' ? 'text-brand-700 font-black' : 'text-slate-300'}">${d[0]}</span>`).join(' ');
+      const chips = r.runs ? r.shown.map(cl => { const a = this.trainAvail(r, cl), b = this.availBadge(a), fare = trainFare(r.km, t.type, cl, q);
+        return `<button ${a.st === 'NOTOPEN' ? 'disabled style="opacity:.6"' : ''} onclick="app.openTrain('${t.no}',${r.i},${r.j},'${cl}')" class="chip-avail" id="chip_${t.no}_${cl}"><div class="flex justify-between gap-2 text-xs font-black text-slate-800"><span>${cl}</span><span>${rupee(fare)}</span></div><div class="text-[11px] font-black ${b.cls}">${b.txt}</div><div class="text-[10px] text-slate-400">${CLS[cl].n}</div></button>`; }).join('')
+        : `<div class="text-sm font-bold text-rose-600 bg-rose-50 px-3 py-2 rounded-lg">Does not run on ${this.formatDisplayDate(r.journeyIso)} (${DAY_NAMES[new Date(r.journeyIso + 'T00:00:00').getDay()]}). Runs: ${DAY_NAMES.filter((d, k) => t.days[k] === '1').join(', ')}</div>`;
+      return `<div class="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition overflow-hidden ${r.runs ? '' : 'opacity-80'}"><div class="p-5 sm:p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
+          <div><div class="flex items-center gap-2 flex-wrap"><h3 class="text-lg font-black text-slate-900">${esc(t.name)}</h3><span class="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded font-bold">${t.no}</span><span class="text-[11px] px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 font-black">${t.type}</span>${t.custom ? '<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-black">Added by admin</span>' : ''}</div>
+            <p class="text-xs text-slate-500 font-semibold mt-1">Runs on: <span class="font-mono tracking-wider">${days}</span></p></div>
+          <button onclick="app.showTrainOnMap('${t.no}')" class="self-start px-3 py-2 border border-slate-200 hover:border-brand-500 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-1.5"><i data-lucide="map" class="w-3.5 h-3.5 text-brand-600"></i> View route on map</button></div>
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 py-4 items-center">
+          <div class="sm:col-span-4"><div class="text-xl font-black text-slate-900">${r.dep}</div><div class="text-xs font-bold text-slate-700">${f}</div><div class="text-[11px] text-slate-400">${esc(stationName(f))}</div></div>
+          <div class="sm:col-span-4 text-center"><span class="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">${fmtMin(r.durMin)}</span><div class="flex items-center my-1"><div class="h-px w-full bg-slate-200"></div><i data-lucide="train-front" class="w-4 h-4 mx-2 text-brand-600 shrink-0"></i><div class="h-px w-full bg-slate-200"></div></div><span class="text-[11px] text-slate-400">${r.km} km &bull; ${r.j - r.i - 1} halts</span></div>
+          <div class="sm:col-span-4 sm:text-right"><div class="text-xl font-black text-slate-900">${r.arr}${r.arrPlus ? `<sup class="text-[10px] text-rose-500 font-bold"> +${r.arrPlus}d</sup>` : ''}</div><div class="text-xs font-bold text-slate-700">${to}</div><div class="text-[11px] text-slate-400">${esc(stationName(to))}</div></div></div>
+        <div class="flex flex-wrap gap-2 pt-3 border-t border-slate-100">${chips}</div></div>
+        <div id="tseat_${t.no}" class="hidden border-t border-slate-200 bg-slate-50 p-5 sm:p-6"></div></div>`;
+    }).join('');
+  }
+  renderSearchResults() {
+    this.updateRouteMap();
+    const { from, to, date } = this.currentSearch;
+    $('summaryRoute').textContent = `${from} → ${to}`;
+    $('summaryDate').textContent = `${this.formatDisplayDate(date)} • One Way • ${this.mode === 'bus' ? 'Bus' : 'Train'}`;
+    $('priceLabel').textContent = '₹' + $('filterPrice').value;
+    this.renderSortButtons(); this.sel = null;
+    if (this.mode === 'bus') { if (!this.busPool.length) { this.busPool = this.getBusPool(from, to); this.renderOperatorFilters(); } this.renderBusResults(); }
+    else this.renderTrainResults();
+    if (window.lucide) lucide.createIcons();
+  }
+  formatDisplayDate(s) { if (!s) return ''; return new Date(s + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); }
+  showToast(message, type = 'info') {
+    const c = $('toastContainer'); if (!c) return; const t = document.createElement('div');
+    const col = { success: 'bg-emerald-600', error: 'bg-rose-600', warning: 'bg-amber-600', info: 'bg-slate-900' }[type] || 'bg-slate-900';
+    t.className = `px-4 py-3 rounded-xl shadow-xl text-xs font-bold text-white transition-all duration-300 pointer-events-auto translate-y-2 opacity-0 max-w-xs ${col}`; t.textContent = message;
+    c.appendChild(t); requestAnimationFrame(() => t.classList.remove('translate-y-2', 'opacity-0'));
+    setTimeout(() => { t.classList.add('opacity-0'); setTimeout(() => t.remove(), 300); }, 3800);
+  }
+  closeModal(id) { $(id).classList.add('hidden'); $(id).classList.remove('flex'); }
+  openModal(id) { $(id).classList.remove('hidden'); $(id).classList.add('flex'); }
+}
+/* ===================== APP BOOKING: seats, passengers, payment, tickets, bookings, admin, auth ===================== */
+const BERTH_NAME = { LB: 'Lower', MB: 'Middle', UB: 'Upper', SL: 'Side Lower', SU: 'Side Upper', W: 'Window', M: 'Middle', A: 'Aisle' };
+
+Object.assign(MakeMyJourneyApp.prototype, {
+  closeDrawers() { document.querySelectorAll('[id^="seatContainer_"],[id^="tseat_"]').forEach(e => e.classList.add('hidden')); },
+  paxCount(s) { return s.mode === 'bus' ? s.seats.length : (s.avail.st === 'AVAILABLE' ? (s.seats.length || s.count) : s.count); },
+
+  /* ---------- BUS seat map ---------- */
+  toggleBusSeats(id) {
+    const c = $('seatContainer_' + id), opening = c.classList.contains('hidden'); this.closeDrawers();
+    if (opening) {
+      const bus = this.busPool.find(b => b.id === id);
+      this.sel = { mode: 'bus', bus, date: this.currentSearch.date, seats: [], insurance: false, coupon: null };
+      c.classList.remove('hidden'); this.renderBusSeatMap();
+    } else this.sel = null;
+    if (window.lucide) lucide.createIcons();
+  },
+  seatCls(booked, female, selected) {
+    if (booked) return 'bg-slate-200 border-slate-300 text-slate-400 cursor-not-allowed pointer-events-none';
+    if (selected) return 'bg-brand-600 border-brand-600 text-white shadow-md scale-105';
+    if (female) return 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100';
+    return 'bg-white border-slate-300 text-slate-700 hover:border-brand-500 hover:bg-brand-50';
+  },
+  renderBusSeatMap() {
+    const s = this.sel, bus = s.bus, c = $('seatContainer_' + bus.id); if (!c) return;
+    const booked = this.busBooked(bus, s.date), lay = busLayout(bus), p = this.pricing(s);
+    const btn = seat => { const b = booked.has(seat), f = bus.femaleSeats.includes(seat), on = s.seats.includes(seat);
+      return `<button type="button" onclick="app.handleBusSeat('${seat}')" ${b ? 'disabled' : ''} class="relative h-14 rounded-lg border-2 flex flex-col items-center justify-center font-bold text-xs seat-transition ${this.seatCls(b, f, on)}">${f && !b && !on ? '<span class="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-rose-500 text-white flex items-center justify-center text-[9px]">&#9792;</span>' : ''}<span class="text-[11px]">${seat}</span><span class="text-[9px] font-normal opacity-80">₹${bus.price}</span></button>`; };
+    let layout;
+    if (lay.kind === 'sleeper') layout = lay.decks.map((d, k) => `<div class="bg-white p-4 rounded-xl border border-slate-200"><div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-100"><span class="text-xs font-black uppercase tracking-wider text-slate-500">${d.title}</span>${k === 0 ? '<span class="text-[11px] text-slate-400 flex items-center gap-1"><i data-lucide="steering-wheel" class="w-3.5 h-3.5"></i> Driver</span>' : ''}</div><div class="grid grid-cols-6 gap-2 sm:gap-3">${d.seats.map(btn).join('')}</div></div>`).join('');
+    else layout = `<div class="bg-white p-4 rounded-xl border border-slate-200"><div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-100"><span class="text-xs font-black uppercase tracking-wider text-slate-500">Seater layout (2 + 2)</span><span class="text-[11px] text-slate-400 flex items-center gap-1"><i data-lucide="steering-wheel" class="w-3.5 h-3.5"></i> Driver</span></div><div class="space-y-2 max-w-xs mx-auto">${lay.rows.map(r => `<div class="grid grid-cols-5 gap-2">${btn(r[0])}${btn(r[1])}<div></div>${btn(r[2])}${btn(r[3])}</div>`).join('')}</div></div>`;
+    c.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start"><div class="lg:col-span-8 space-y-4">
+      <div class="flex flex-wrap items-center gap-4 text-xs bg-white p-3 rounded-xl border border-slate-200"><span class="flex items-center gap-1.5"><span class="w-4 h-4 rounded border border-slate-300 bg-white"></span>Available</span><span class="flex items-center gap-1.5"><span class="w-4 h-4 rounded bg-brand-600"></span>Selected</span><span class="flex items-center gap-1.5"><span class="w-4 h-4 rounded bg-slate-200 border border-slate-300"></span>Booked</span><span class="flex items-center gap-1.5"><span class="w-4 h-4 rounded bg-rose-50 border border-rose-300"></span>Female reserved</span></div>${layout}</div>
+      <div class="lg:col-span-4 bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4"><h4 class="font-black text-slate-800 text-sm pb-2 border-b border-slate-100 flex justify-between"><span>Selected Seats</span><span class="text-brand-600">${s.seats.length} / 6 Max</span></h4>
+      <div class="min-h-[50px] flex flex-wrap gap-2 items-center">${s.seats.length ? s.seats.map(x => `<span class="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-brand-50 border border-brand-100 text-brand-700 text-xs font-bold">${x} (₹${bus.price})<button type="button" onclick="app.handleBusSeat('${x}')" class="ml-1">&times;</button></span>`).join('') : '<span class="text-xs text-slate-400">Click a seat to select it.</span>'}</div>
+      <div class="pt-3 border-t border-slate-100 space-y-2 text-xs"><div class="flex justify-between text-slate-500"><span>Base fare (${p.n} &times; ₹${bus.price})</span><span class="font-bold text-slate-700">${rupee(p.base)}</span></div><div class="flex justify-between text-slate-500"><span>GST (5%)</span><span class="font-bold text-slate-700">${rupee(p.gst)}</span></div><div class="flex justify-between text-sm font-black text-slate-900 pt-2 border-t border-slate-100"><span>Total</span><span class="text-brand-600">${rupee(p.total)}</span></div></div>
+      <button type="button" onclick="app.proceedToPassengers()" ${s.seats.length ? '' : 'disabled'} class="w-full py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:pointer-events-none text-white font-black text-xs rounded-xl flex items-center justify-center gap-2">Continue to Passenger Details <i data-lucide="arrow-right" class="w-4 h-4"></i></button></div></div>`;
+    if (window.lucide) lucide.createIcons();
+  },
+  handleBusSeat(seat) {
+    const s = this.sel; if (!s || s.mode !== 'bus') return; const k = s.seats.indexOf(seat);
+    if (k > -1) s.seats.splice(k, 1); else { if (s.seats.length >= 6) { this.showToast('Maximum 6 seats per booking', 'warning'); return; } s.seats.push(seat); }
+    this.renderBusSeatMap();
+  },
+
+  /* ---------- TRAIN class drawer ---------- */
+  openTrain(no, i, j, cls) {
+    const t = this.allTrains().find(x => x.no === no); if (!t) return;
+    const r = this.buildTrainResult(t, i, j, this.currentSearch.date), a = this.trainAvail(r, cls);
+    if (a.st === 'NOTOPEN') { this.showToast(`Booking opens ${a.n} days before this date window.`, 'info'); return; }
+    this.closeDrawers(); document.querySelectorAll('.chip-avail').forEach(e => e.classList.remove('on')); const chip = $(`chip_${no}_${cls}`); if (chip) chip.classList.add('on');
+    this.sel = { mode: 'train', t, r, cls, quota: this.currentSearch.quota, count: 1, seats: [], coach: 0, avail: a, insurance: false, coupon: null };
+    this.mapTrainNo = no; this.updateRouteMap();
+    $('tseat_' + no).classList.remove('hidden'); this.renderTrainDrawer();
+  },
+  trainFree(s) {
+    const spec = COACH[s.cls], a = s.avail, all = [];
+    for (let c = 1; c <= spec.coaches; c++) for (let n = 1; n <= spec.n; n++) all.push(`${spec.prefix}${c}-${n}`);
+    const sh = shuffled(all, rng('sh|' + a.key)), used = new Set(this.seatState['T|' + a.key] || []);
+    const free = new Set(a.baseAvail ? sh.slice(0, Math.min(a.n0, all.length)).filter(k => !used.has(k)) : []);
+    return free;
+  },
+  renderTrainDrawer() {
+    const s = this.sel, spec = COACH[s.cls], a = s.avail, c = $('tseat_' + s.t.no); if (!c) return;
+    const pick = a.st === 'AVAILABLE', free = pick ? this.trainFree(s) : new Set(), p = this.pricing(s), unit = trainFare(s.r.km, s.t.type, s.cls, s.quota), maxPax = pick ? Math.min(6, a.n) : 6;
+    const cl = `${spec.prefix}${s.coach + 1}`; let grid = '';
+    if (pick) {
+      let rows = '';
+      for (let start = 1; start <= spec.n; start += spec.perRow) {
+        let cells = '';
+        for (let k = 0; k < spec.perRow && start + k <= spec.n; k++) {
+          const n = start + k, key = `${cl}-${n}`, tp = spec.types[(n - 1) % spec.types.length], isFree = free.has(key), on = s.seats.includes(key);
+          if (spec.aisle && k === spec.aisle) cells += '<span class="w-4"></span>';
+          cells += `<button type="button" onclick="app.handleTrainSeat('${key}')" ${isFree ? '' : 'disabled'} class="relative w-11 h-11 rounded-md border-2 flex flex-col items-center justify-center text-[10px] font-bold seat-transition ${this.seatCls(!isFree, false, on)}"><span>${n}</span><span class="text-[8px] font-normal opacity-80">${tp}</span></button>`;
+        }
+        rows += `<div class="flex gap-1.5 justify-center flex-wrap">${cells}</div>`;
+      }
+      grid = `<div class="flex flex-wrap gap-2 mb-3">${Array.from({ length: spec.coaches }, (_, k) => `<button type="button" onclick="app.setTrainCoach(${k})" class="px-3 py-1.5 rounded-lg text-xs font-bold border ${k === s.coach ? 'bg-brand-600 text-white border-brand-600' : 'bg-white border-slate-300 text-slate-700'}">Coach ${spec.prefix}${k + 1}</button>`).join('')}</div>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 space-y-1.5 max-h-96 overflow-auto">${rows}</div>
+        <div class="flex flex-wrap items-center gap-4 text-xs mt-3 text-slate-600"><span class="flex items-center gap-1.5"><span class="w-4 h-4 rounded border border-slate-300 bg-white"></span>Available</span><span class="flex items-center gap-1.5"><span class="w-4 h-4 rounded bg-brand-600"></span>Selected</span><span class="flex items-center gap-1.5"><span class="w-4 h-4 rounded bg-slate-200 border border-slate-300"></span>Booked</span><span>LB/MB/UB = Lower/Middle/Upper berth, SL/SU = Side, W/M/A = Window/Middle/Aisle</span></div>`;
+    } else grid = `<div class="bg-white p-5 rounded-xl border ${a.st === 'RAC' ? 'border-amber-200' : 'border-rose-200'}"><div class="font-black ${a.st === 'RAC' ? 'text-amber-700' : 'text-rose-700'}">${a.st === 'RAC' ? 'RAC' : 'Waitlist'} ${a.n}</div><p class="text-sm text-slate-600 mt-1">${a.st === 'RAC' ? 'You get a shared side-lower berth; a full berth may be allotted when someone cancels.' : 'Waitlisted tickets get a berth only if earlier passengers cancel. Chart preparation decides the final status.'} Seats cannot be picked for this status.</p></div>`;
+    c.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start"><div class="lg:col-span-8">${grid}</div>
+      <div class="lg:col-span-4 bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div><div class="font-black text-slate-900 text-sm">${esc(s.t.name)} &bull; ${s.cls}</div><div class="text-xs text-slate-500">${CLS[s.cls].n} &bull; ${this.formatDisplayDate(s.r.journeyIso)}</div></div>
+        <label class="block text-xs font-bold text-slate-600">Quota<select onchange="app.setTrainQuota(this.value)" class="mt-1 w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-semibold"><option value="GN" ${s.quota === 'GN' ? 'selected' : ''}>General</option><option value="TQ" ${s.quota === 'TQ' ? 'selected' : ''}>Tatkal (+30%)</option><option value="LD" ${s.quota === 'LD' ? 'selected' : ''}>Ladies</option></select></label>
+        <div class="flex items-center justify-between text-xs font-bold text-slate-600"><span>Passengers</span><div class="flex items-center gap-2"><button type="button" onclick="app.setPax(-1)" class="w-7 h-7 rounded-lg border border-slate-300">&minus;</button><span class="w-5 text-center text-sm font-black">${pick && s.seats.length ? s.seats.length : s.count}</span><button type="button" onclick="app.setPax(1)" class="w-7 h-7 rounded-lg border border-slate-300">+</button></div></div>
+        ${pick ? `<div class="flex flex-wrap gap-2 min-h-[28px]">${s.seats.map(k => `<span class="px-2.5 py-1 rounded-lg bg-brand-50 border border-brand-100 text-brand-700 text-xs font-bold">${k}<button type="button" onclick="app.handleTrainSeat('${k}')" class="ml-1">&times;</button></span>`).join('') || '<span class="text-xs text-slate-400">Pick seats or let us auto-assign.</span>'}</div><button type="button" onclick="app.autoAssign()" class="w-full py-2 border border-brand-600 text-brand-600 font-bold text-xs rounded-xl hover:bg-brand-50">Auto-assign ${s.seats.length ? '(re-pick)' : s.count} seat(s)</button>` : ''}
+        <div class="pt-3 border-t border-slate-100 space-y-2 text-xs"><div class="flex justify-between text-slate-500"><span>Fare (${p.n} &times; ${rupee(unit)})</span><span class="font-bold text-slate-700">${rupee(p.base)}</span></div>${p.gst ? `<div class="flex justify-between text-slate-500"><span>GST (5% AC)</span><span class="font-bold text-slate-700">${rupee(p.gst)}</span></div>` : ''}<div class="flex justify-between text-slate-500"><span>Convenience fee</span><span class="font-bold text-slate-700">${rupee(p.conv)}</span></div><div class="flex justify-between text-sm font-black text-slate-900 pt-2 border-t border-slate-100"><span>Total</span><span class="text-brand-600">${rupee(p.total)}</span></div></div>
+        <button type="button" onclick="app.proceedToPassengers()" class="w-full py-3 bg-brand-600 hover:bg-brand-700 text-white font-black text-xs rounded-xl flex items-center justify-center gap-2">${pick ? 'Continue to Passenger Details' : 'Book ' + a.st + ' Ticket'} <i data-lucide="arrow-right" class="w-4 h-4"></i></button></div></div>`;
+    s.maxPax = maxPax; if (window.lucide) lucide.createIcons();
+  },
+  setTrainCoach(k) { this.sel.coach = k; this.renderTrainDrawer(); },
+  setTrainQuota(q) { this.sel.quota = q; this.currentSearch.quota = q; this.renderTrainDrawer(); },
+  setPax(d) {
+    const s = this.sel; if (!s || s.mode !== 'train') return; const max = s.avail.st === 'AVAILABLE' ? Math.min(6, s.avail.n) : 6;
+    if (s.avail.st === 'AVAILABLE' && s.seats.length) { this.showToast('Remove selected seats first, or use Auto-assign.', 'info'); return; }
+    s.count = Math.max(1, Math.min(max, s.count + d)); this.renderTrainDrawer();
+  },
+  handleTrainSeat(key) {
+    const s = this.sel; if (!s || s.mode !== 'train') return; const k = s.seats.indexOf(key);
+    if (k > -1) s.seats.splice(k, 1); else { if (s.seats.length >= Math.min(6, s.avail.n)) { this.showToast(`You can select up to ${Math.min(6, s.avail.n)} seats`, 'warning'); return; } s.seats.push(key); }
+    s.count = Math.max(1, s.seats.length || s.count); this.renderTrainDrawer();
+  },
+  autoAssign() {
+    const s = this.sel, n = s.seats.length ? s.seats.length : s.count; const free = this.trainFree(s); const cl = `${COACH[s.cls].prefix}${s.coach + 1}`;
+    const ordered = Array.from(free).sort((x, y) => (x.startsWith(cl + '-') ? 0 : 1) - (y.startsWith(cl + '-') ? 0 : 1) || x.localeCompare(y, undefined, { numeric: true }));
+    s.seats = ordered.slice(0, n); s.count = n; this.renderTrainDrawer();
+  },
+
+  /* ---------- pricing & coupons ---------- */
+  pricing(s) {
+    const n = this.paxCount(s) || 0; let unit, base, gst, conv = 0;
+    if (s.mode === 'bus') { unit = s.bus.price; base = unit * n; gst = Math.round(base * .05); }
+    else { unit = trainFare(s.r.km, s.t.type, s.cls, s.quota); base = unit * n; const ac = CLS[s.cls].ac; gst = ac ? Math.round(base * .05) : 0; conv = ac ? 35 : 18; }
+    const ins = s.insurance ? n * (s.mode === 'bus' ? 10 : 1) : 0, disc = this.couponDiscount(s.coupon, base, s.mode);
+    return { n, unit, base, gst, conv, ins, disc, total: Math.max(0, base + gst + conv + ins - disc) };
+  },
+  couponDiscount(code, base, mode) {
+    const c = code && COUPONS[code]; if (!c || !c.modes.includes(mode) || base < c.min) return 0;
+    return Math.min(base, c.pct ? Math.min(Math.round(base * c.pct), c.max) : c.flat);
+  },
+
+  /* ---------- passengers ---------- */
+  proceedToPassengers() {
+    const s = this.sel; if (!s) return;
+    if (s.mode === 'bus' && !s.seats.length) { this.showToast('Select at least 1 seat', 'warning'); return; }
+    if (s.mode === 'train' && s.avail.st === 'AVAILABLE' && !s.seats.length) this.autoAssign();
+    const n = this.paxCount(s), labels = [];
+    for (let k = 0; k < n; k++) {
+      if (s.mode === 'bus') labels.push('Seat: ' + s.seats[k]);
+      else if (s.seats[k]) { const [cch, no] = s.seats[k].split('-'), tp = COACH[s.cls].types[(+no - 1) % COACH[s.cls].types.length]; labels.push(`${cch} / ${no} / ${BERTH_NAME[tp]}`); }
+      else labels.push(`${s.avail.st} ${s.avail.n + k}`);
+    }
+    s.labels = labels; s.insurance = false; s.coupon = null; $('optInsurance').checked = false;
+    $('dynamicPassengerForms').innerHTML = labels.map((l, k) => `<div class="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-3"><div class="flex justify-between items-center text-xs font-black text-slate-700"><span class="flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-brand-600 text-white flex items-center justify-center text-[10px]">${k + 1}</span>Passenger ${k + 1}</span><span class="px-2 py-0.5 rounded bg-brand-100 text-brand-700 font-mono">${l}</span></div>
+      <div class="grid grid-cols-1 sm:grid-cols-12 gap-3"><div class="sm:col-span-6"><label class="block text-[11px] font-bold text-slate-600 mb-1">Full name (as per ID) *</label><input type="text" name="pName_${k}" required value="${k === 0 ? esc(this.currentUser?.name || '') : ''}" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold"></div>
+      <div class="sm:col-span-3"><label class="block text-[11px] font-bold text-slate-600 mb-1">Age *</label><input type="number" min="1" max="120" name="pAge_${k}" required value="${k === 0 ? 28 : 26}" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold"></div>
+      <div class="sm:col-span-3"><label class="block text-[11px] font-bold text-slate-600 mb-1">Gender *</label><select name="pGender_${k}" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold bg-white"><option>Male</option><option>Female</option><option>Other</option></select></div></div></div>`).join('');
+    $('contactEmail').value = this.currentUser?.email || ''; $('contactPhone').value = this.currentUser?.phone || ''; $('emergencyName').value = ''; $('emergencyPhone').value = '';
+    this.renderPassengerSideSummary(); this.navigate('passenger');
+  },
+  routeSummaryHtml(s) {
+    if (s.mode === 'bus') { const b = s.bus, a = this.busArrival(b); return { title: b.operator, sub: b.type, rows: [['Route', `${b.from} → ${b.to}`], ['Date', this.formatDisplayDate(s.date)], ['Departure', b.departureTime], ['Arrival', a.time + (a.plus ? ` (+${a.plus}d)` : '')], ['Seats', s.seats.join(', ')]] }; }
+    const r = s.r, t = s.t; return { title: `${t.no} ${t.name}`, sub: `${CLS[s.cls].n} (${s.cls}) • ${{ GN: 'General', TQ: 'Tatkal', LD: 'Ladies' }[s.quota]} quota`, rows: [['Route', `${t.stops[r.i].city} → ${t.stops[r.j].city}`], ['Date', this.formatDisplayDate(s.r.journeyIso)], ['Departure', r.dep], ['Arrival', r.arr + (r.arrPlus ? ` (+${r.arrPlus}d)` : '')], ['Status', s.seats.length ? 'Seats ' + s.seats.join(', ') : `${s.avail.st} ${s.avail.n}`]] };
+  },
+  renderPassengerSideSummary() {
+    const s = this.sel, h = this.routeSummaryHtml(s), p = this.pricing(s);
+    $('passengerSummaryCard').innerHTML = `<h4 class="font-black text-slate-900 text-sm pb-2 border-b border-slate-100">Trip Summary</h4><div><h5 class="font-black text-slate-800 text-sm">${esc(h.title)}</h5><p class="text-xs text-slate-500">${esc(h.sub)}</p></div>
+      <div class="text-xs space-y-1 bg-slate-50 p-3 rounded-xl border border-slate-100">${h.rows.map(r => `<div class="flex justify-between gap-3"><span class="text-slate-500">${r[0]}</span><span class="font-bold text-slate-700 text-right">${esc(r[1])}</span></div>`).join('')}</div>
+      <div class="pt-2 border-t border-slate-100 space-y-1.5 text-xs"><div class="flex justify-between text-slate-500"><span>Fare (${p.n})</span><span>${rupee(p.base)}</span></div><div class="flex justify-between text-slate-500"><span>GST</span><span>${rupee(p.gst)}</span></div>${p.conv ? `<div class="flex justify-between text-slate-500"><span>Convenience fee</span><span>${rupee(p.conv)}</span></div>` : ''}${p.ins ? `<div class="flex justify-between text-slate-500"><span>Insurance</span><span>${rupee(p.ins)}</span></div>` : ''}<div class="flex justify-between text-sm font-black text-slate-900 pt-2 border-t border-slate-100"><span>Total Payable</span><span class="text-brand-600">${rupee(p.total)}</span></div></div>`;
+  },
+  toggleInsurance() { this.sel.insurance = $('optInsurance').checked; this.renderPassengerSideSummary(); },
+  handlePassengerSubmit(e) {
+    e.preventDefault(); const s = this.sel; if (!s) return;
+    s.passengers = s.labels.map((_, k) => ({ name: document.querySelector(`input[name="pName_${k}"]`).value.trim(), age: document.querySelector(`input[name="pAge_${k}"]`).value, gender: document.querySelector(`select[name="pGender_${k}"]`).value }));
+    s.contactEmail = $('contactEmail').value.trim(); s.contactPhone = $('contactPhone').value.trim();
+    s.emergency = { name: $('emergencyName').value.trim(), phone: $('emergencyPhone').value.trim() };
+    s.upgrade = $('optUpgrade').checked; s.confirmOnly = $('optConfirmOnly').checked;
+    if (s.mode === 'train' && s.confirmOnly && s.avail.st !== 'AVAILABLE') { this.showToast('You chose "Book only if confirmed", but this class is RAC/Waitlisted. Untick it or pick another class.', 'warning'); return; }
+    this.renderPaymentPage(); this.navigate('payment'); this.setPaymentTab(this.paymentTab);
+  },
+
+  /* ---------- payment ---------- */
+  renderPaymentPage() {
+    const s = this.sel; if (!s) return; const p = this.pricing(s), h = this.routeSummaryHtml(s);
+    $('payButtonText').textContent = `Pay ${rupee(p.total)} Now`;
+    $('paymentOrderSummary').innerHTML = `<h4 class="font-black text-slate-900 text-sm pb-2 border-b border-slate-100">Price Details</h4><div class="text-xs text-slate-500"><b class="text-slate-800">${esc(h.title)}</b><br>${h.rows[0][1]} &bull; ${h.rows[1][1]}</div>
+      <div class="space-y-2 text-xs"><div class="flex justify-between text-slate-600"><span>Base fare (${p.n})</span><span class="font-bold text-slate-800">${rupee(p.base)}</span></div><div class="flex justify-between text-slate-600"><span>GST</span><span class="font-bold text-slate-800">${rupee(p.gst)}</span></div>
+      ${p.conv ? `<div class="flex justify-between text-slate-600"><span>Convenience fee</span><span class="font-bold text-slate-800">${rupee(p.conv)}</span></div>` : ''}${p.ins ? `<div class="flex justify-between text-slate-600"><span>Insurance</span><span class="font-bold text-slate-800">${rupee(p.ins)}</span></div>` : ''}
+      ${p.disc ? `<div class="flex justify-between text-emerald-600 font-bold"><span>Coupon (${s.coupon})</span><span>-${rupee(p.disc)}</span></div>` : ''}
+      <div class="pt-3 border-t border-slate-100 flex justify-between text-base font-black text-slate-900"><span>Total Amount</span><span class="text-brand-600">${rupee(p.total)}</span></div></div>
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 text-[11px] text-slate-500 space-y-1"><div class="font-bold text-slate-700">Passengers</div><div>${s.passengers.map((x, k) => `${esc(x.name)} (${esc(s.labels[k])})`).join(', ')}</div><div>Contact: ${esc(s.contactPhone)}</div></div>`;
+  },
+  setPaymentTab(tab) {
+    this.paymentTab = tab;
+    document.querySelectorAll('.payment-tab').forEach(b => { b.className = 'payment-tab py-2.5 rounded-xl border text-xs font-bold ' + (b.dataset.tab === tab ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'); });
+    document.querySelectorAll('.payment-panel').forEach(pn => pn.classList.add('hidden')); $('payment-panel-' + tab).classList.remove('hidden');
+  },
+  verifyUpi() { const v = $('upiVpaInput').value.trim(); if (!v.includes('@')) { this.showToast('Enter a valid UPI ID', 'error'); return; } this.showToast(`UPI ID ${v} format looks valid (demo)`, 'success'); },
+  applyCoupon() {
+    const s = this.sel; if (!s) return; const code = $('promoCodeInput').value.trim().toUpperCase(), m = $('couponMessage'), c = COUPONS[code], base = this.pricing(Object.assign({}, s, { coupon: null })).base;
+    m.classList.remove('hidden'); let err = '';
+    if (!c) err = 'Invalid promo code'; else if (!c.modes.includes(s.mode)) err = `${code} is valid only for ${c.modes.join(' / ')} bookings`; else if (base < c.min) err = `${code} needs a minimum fare of ${rupee(c.min)}`;
+    if (err) { s.coupon = null; m.textContent = err; m.className = 'text-xs mt-1 font-bold text-rose-600'; this.showToast(err, 'error'); }
+    else { s.coupon = code; m.textContent = `${code} applied: ${c.title}`; m.className = 'text-xs mt-1 font-bold text-emerald-600'; this.showToast(`Coupon ${code} applied`, 'success'); }
+    this.renderPaymentPage();
+  },
+  processDemoPayment() {
+    const s = this.sel; if (!s) return; const btn = $('payButtonCta'), orig = btn.innerHTML; btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader" class="w-5 h-5 animate-spin"></i> Contacting bank gateway...'; if (window.lucide) lucide.createIcons();
+    setTimeout(() => {
+      const p = this.pricing(s); let b;
+      if (s.mode === 'bus') {
+        const bus = s.bus, a = this.busArrival(bus), key = `B|${bus.id}|${s.date}`;
+        (this.seatState[key] = this.seatState[key] || []).push(...s.seats);
+        b = { pnr: 'MMJ-' + Math.floor(100000 + Math.random() * 900000), mode: 'bus', busId: bus.id, busOperator: bus.operator, busType: bus.type, busNumber: bus.busNumber, from: bus.from, to: bus.to, depTime: bus.departureTime, arrTime: a.time, arrPlus: a.plus, durMin: bus.durMin, boardingPoint: bus.boardingPoint, droppingPoint: bus.droppingPoint, date: s.date, passengers: s.passengers.map((x, k) => Object.assign({}, x, { seat: s.seats[k] })), seats: s.seats.slice() };
+      } else {
+        const spec = COACH[s.cls], a = s.avail, r = s.r, t = s.t;
+        const pax = s.passengers.map((x, k) => {
+          if (s.seats[k]) { const [cch, no] = s.seats[k].split('-'), n = +no; return Object.assign({}, x, { coach: cch, no: n, berth: spec.types[(n - 1) % spec.types.length], seat: s.seats[k], status: 'CNF' }); }
+          return Object.assign({}, x, { status: `${a.st === 'RAC' ? 'RAC' : 'WL'} ${a.n + k}` });
+        });
+        if (s.seats.length) (this.seatState['T|' + a.key] = this.seatState['T|' + a.key] || []).push(...s.seats);
+        b = { pnr: String(2000000000 + Math.floor(Math.random() * 7999999999)), mode: 'train', trainNo: t.no, trainName: t.name, trainType: t.type, cls: s.cls, quota: s.quota, from: t.stops[r.i].city, to: t.stops[r.j].city, depTime: r.dep, arrTime: r.arr, arrPlus: r.arrPlus, durMin: r.durMin, boardingPoint: stationName(t.stops[r.i].city), droppingPoint: stationName(t.stops[r.j].city), date: r.journeyIso, originIso: r.originIso, availKey: a.key, passengers: pax, seats: s.seats.slice(), ticketStatus: pax[0].status.split(' ')[0] };
+      }
+      Object.assign(b, { contactEmail: s.contactEmail, contactPhone: s.contactPhone, coupon: s.coupon, insurance: s.insurance, fare: p, totalAmount: p.total, status: 'confirmed', bookedAt: new Date().toISOString() });
+      this.bookings.unshift(b); this.saveState(); this.lastBooking = b; this.sel = null;
+      btn.disabled = false; btn.innerHTML = orig; $('promoCodeInput').value = ''; $('couponMessage').classList.add('hidden');
+      this.renderConfirmation(b); this.navigate('confirmation');
+      this.showToast('Payment successful (demo). Ticket generated.', 'success');
+    }, 1400);
+  },
+
+  /* ---------- ticket ---------- */
+  renderConfirmation(b) {
+    const bus = b.mode === 'bus', cancelled = b.status === 'cancelled';
+    $('confTitle').textContent = cancelled ? 'Booking Cancelled' : (bus || b.ticketStatus === 'CNF' ? 'Booking Confirmed!' : `Ticket Booked - ${b.ticketStatus}`);
+    const paxRows = bus
+      ? b.passengers.map(p => `<div class="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-lg border border-slate-100 text-xs"><span class="font-bold text-slate-800">${esc(p.name)} (${p.gender[0]}, ${p.age} yrs)</span><span class="font-mono font-bold text-brand-600 bg-white px-2 py-0.5 rounded border border-slate-200">Seat ${p.seat}</span></div>`).join('')
+      : `<table class="w-full text-xs"><thead><tr class="text-left text-slate-400 uppercase text-[10px]"><th class="py-1">Passenger</th><th>Age/Sex</th><th>Status</th><th>Coach / Seat</th></tr></thead><tbody>${b.passengers.map(p => `<tr class="border-t border-slate-100"><td class="py-2 font-bold text-slate-800">${esc(p.name)}</td><td>${p.age}/${p.gender[0]}</td><td class="font-black ${p.status === 'CNF' ? 'text-emerald-600' : p.status.startsWith('RAC') ? 'text-amber-600' : 'text-rose-600'}">${p.status}</td><td class="font-mono">${p.coach ? `${p.coach} / ${p.no} / ${BERTH_NAME[p.berth]}` : '-'}</td></tr>`).join('')}</tbody></table>`;
+    const head = bus ? `<h3 class="text-xl font-black text-slate-900">${esc(b.busOperator)}</h3><p class="text-xs text-slate-500">${b.busType} &bull; Coach #${esc(b.busNumber)}</p>`
+      : `<h3 class="text-xl font-black text-slate-900">${b.trainNo} ${esc(b.trainName)}</h3><p class="text-xs text-slate-500">${CLS[b.cls].n} (${b.cls}) &bull; ${{ GN: 'General', TQ: 'Tatkal', LD: 'Ladies' }[b.quota]} quota &bull; ${b.trainType}</p>`;
+    $('printTicketContainer').innerHTML = `<div class="bg-gradient-to-r from-brand-700 to-brand-500 px-6 py-4 text-white flex justify-between items-center"><div class="flex items-center gap-2 font-black text-lg"><i data-lucide="${bus ? 'bus' : 'train-front'}" class="w-5 h-5"></i> Make My Journey ${bus ? 'E-Boarding Pass' : 'E-Ticket'}</div><span class="text-xs bg-white/20 px-2.5 py-1 rounded-full font-bold">${cancelled ? 'CANCELLED' : 'DEMO TICKET'}</span></div>
+      <div class="p-6 sm:p-8 space-y-6"><div class="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-dashed border-slate-200 gap-4"><div>${head}</div><div class="sm:text-right"><span class="text-xs text-slate-400 block font-bold">${bus ? 'BOOKING REFERENCE' : 'PNR'}</span><span class="text-base font-mono font-black text-brand-600">${b.pnr}</span></div></div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
+        <div><span class="text-[11px] font-black text-slate-400 uppercase">Boarding</span><h4 class="text-base font-black text-slate-900">${b.from}</h4><p class="text-sm font-black text-brand-600">${b.depTime}</p><p class="text-xs text-slate-500">${esc(b.boardingPoint)}</p></div>
+        <div class="text-center"><span class="text-xs font-bold text-slate-500 bg-white px-2.5 py-1 rounded-full border border-slate-200">${fmtMin(b.durMin)}</span><div class="flex items-center justify-center my-1.5 text-slate-300"><div class="h-0.5 w-10 bg-slate-300"></div><i data-lucide="${bus ? 'bus' : 'train-front'}" class="w-4 h-4 mx-1 text-brand-600"></i><div class="h-0.5 w-10 bg-slate-300"></div></div><span class="text-xs text-slate-600 font-bold">${this.formatDisplayDate(b.date)}</span></div>
+        <div class="sm:text-right"><span class="text-[11px] font-black text-slate-400 uppercase">Destination</span><h4 class="text-base font-black text-slate-900">${b.to}</h4><p class="text-sm font-black text-emerald-600">${b.arrTime}${b.arrPlus ? ` (+${b.arrPlus}d)` : ''}</p><p class="text-xs text-slate-500">${esc(b.droppingPoint)}</p></div></div>
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-center"><div class="md:col-span-8 space-y-2"><h4 class="text-xs font-black uppercase tracking-wider text-slate-400">Passengers</h4>${paxRows}</div>
+        <div class="md:col-span-4 flex flex-col items-center border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0"><div id="ticketQrCodeContainer" class="p-2 bg-white rounded-xl border border-slate-200 flex items-center justify-center"></div><span class="text-[10px] text-slate-400 mt-2 font-mono">${bus ? 'Scan at boarding gate' : 'Show with photo ID'}</span></div></div>
+      <div class="pt-4 border-t border-dashed border-slate-200 flex flex-wrap justify-between items-center gap-3 text-xs"><div class="text-slate-500">Payment: <span class="${cancelled ? 'text-rose-600' : 'text-emerald-600'} font-black uppercase">${cancelled ? 'Refund initiated' : 'Paid (demo)'}</span></div><div><span class="text-slate-400 font-bold">Total: </span><span class="text-base font-black text-slate-900">${rupee(b.totalAmount)}</span></div></div></div>`;
+    try { new QRCode($('ticketQrCodeContainer'), { text: `https://example.com/demo-ticket?pnr=${b.pnr}`, width: 90, height: 90, colorDark: '#0f172a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M }); } catch (e) { /* offline */ }
+    if (window.lucide) lucide.createIcons();
+  },
+
+  /* ---------- my bookings ---------- */
+  renderBookingFilters() {
+    const st = [['all', 'All'], ['confirmed', 'Upcoming'], ['cancelled', 'Cancelled']], md = [['all', 'All'], ['bus', 'Bus'], ['train', 'Train']];
+    const mk = (arr, cur, fn) => arr.map(x => `<button onclick="app.${fn}('${x[0]}')" class="px-3 py-1.5 text-xs font-bold rounded-lg ${cur === x[0] ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">${x[1]}</button>`).join('');
+    $('bookingFilters').innerHTML = mk(st, this.bookingFilter, 'filterMyBookings') + '<span class="w-px h-6 bg-slate-200 mx-1"></span>' + mk(md, this.bookingMode, 'filterBookingMode');
+  },
+  filterMyBookings(f) { this.bookingFilter = f; this.renderMyBookings(); },
+  filterBookingMode(m) { this.bookingMode = m; this.renderMyBookings(); },
+  refundFor(b) {
+    const hrs = (new Date(`${b.date}T${b.depTime}:00`) - new Date()) / 36e5, bus = b.mode === 'bus';
+    if (hrs <= 0) return 0;
+    if (bus) return Math.round(b.totalAmount * (hrs >= 24 ? .9 : hrs >= 12 ? .75 : hrs >= 2 ? .5 : 0));
+    const clerk = CLS[b.cls].fee * b.passengers.length, wl = b.ticketStatus && b.ticketStatus !== 'CNF' && b.ticketStatus !== 'RAC';
+    if (wl || hrs >= 48) return Math.max(0, b.totalAmount - clerk);
+    return Math.max(0, Math.round(b.totalAmount * (hrs >= 12 ? .75 : hrs >= 4 ? .5 : 0)) - 0);
+  },
+  renderMyBookings() {
+    this.renderBookingFilters();
+    const list = this.bookings.filter(b => (this.bookingFilter === 'all' || b.status === this.bookingFilter) && (this.bookingMode === 'all' || b.mode === this.bookingMode));
+    const c = $('myBookingsList'), e = $('noBookingsState');
+    if (!list.length) { c.innerHTML = ''; e.classList.remove('hidden'); if (window.lucide) lucide.createIcons(); return; } e.classList.add('hidden');
+    c.innerHTML = list.map(b => { const x = b.status === 'cancelled', bus = b.mode === 'bus';
+      const status = x ? 'cancelled' : (bus ? 'confirmed' : (b.ticketStatus === 'CNF' ? 'confirmed' : b.ticketStatus));
+      return `<div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4"><div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2"><div class="flex items-center gap-2.5"><div class="w-9 h-9 rounded-xl ${x ? 'bg-slate-100 text-slate-400' : 'bg-brand-50 text-brand-600'} flex items-center justify-center"><i data-lucide="${bus ? 'bus' : 'train-front'}" class="w-5 h-5"></i></div>
+        <div><div class="flex items-center gap-2 flex-wrap"><span class="font-mono font-black text-sm text-slate-800">${b.pnr}</span><span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${x ? 'bg-rose-100 text-rose-700' : status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}">${status}</span><span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-slate-100 text-slate-600">${b.mode}</span></div><span class="text-xs text-slate-400 font-semibold">Booked on ${new Date(b.bookedAt).toLocaleDateString('en-GB')}</span></div></div>
+        <div class="sm:text-right"><span class="text-xs text-slate-400 block font-bold">Total fare</span><span class="text-lg font-black text-slate-900">${rupee(b.totalAmount)}</span></div></div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-50 p-3.5 rounded-xl"><div><span class="text-slate-400 block text-[10px] uppercase font-black">Route</span><span class="font-black text-slate-800 text-sm">${b.from} &rarr; ${b.to}</span><p class="text-slate-500 text-[11px]">${esc(bus ? `${b.busOperator} (${b.busType})` : `${b.trainNo} ${b.trainName}`)}</p></div>
+        <div><span class="text-slate-400 block text-[10px] uppercase font-black">Journey</span><span class="font-bold text-slate-800">${this.formatDisplayDate(b.date)}</span><p class="text-slate-500 text-[11px]">Departs ${b.depTime}</p></div>
+        <div><span class="text-slate-400 block text-[10px] uppercase font-black">${bus ? 'Seats' : 'Class / Status'}</span><span class="font-black text-brand-600">${bus ? b.seats.join(', ') : `${b.cls} - ${b.passengers.map(p => p.status).join(', ')}`}</span><p class="text-slate-500 text-[11px]">${b.passengers.length} passenger(s)</p></div></div>
+        <div class="flex flex-wrap items-center justify-between gap-3"><div class="text-xs">${x ? `<span class="text-rose-600 font-bold">Refund of ${rupee(b.refund || 0)} initiated to source (demo)</span>` : `<span class="text-slate-500">Est. refund if cancelled now: <b class="text-slate-700">${rupee(this.refundFor(b))}</b></span>`}</div>
+        <div class="flex gap-2">${x ? '' : `<button onclick="app.cancelBooking('${b.pnr}')" class="px-3.5 py-1.5 border border-rose-200 hover:bg-rose-50 text-rose-600 font-bold text-xs rounded-xl">Cancel</button>`}<button onclick="app.viewTicket('${b.pnr}')" class="px-3.5 py-1.5 bg-slate-900 hover:bg-black text-white font-bold text-xs rounded-xl flex items-center gap-1.5"><i data-lucide="eye" class="w-3.5 h-3.5"></i> ${x ? 'Receipt' : 'View Ticket'}</button></div></div></div>`; }).join('');
+    if (window.lucide) lucide.createIcons();
+  },
+  cancelBooking(pnr) {
+    const b = this.bookings.find(x => x.pnr === pnr); if (!b || b.status === 'cancelled') return;
+    const refund = this.refundFor(b);
+    if (!confirm(`Cancel booking ${pnr}? Estimated refund: ${rupee(refund)}.`)) return;
+    b.status = 'cancelled'; b.refund = refund;
+    const key = b.mode === 'bus' ? `B|${b.busId}|${b.date}` : 'T|' + b.availKey;
+    if (this.seatState[key]) this.seatState[key] = this.seatState[key].filter(k => !(b.seats || []).includes(k));
+    this.saveState(); this.renderMyBookings(); this.showToast(`Booking ${pnr} cancelled. Refund ${rupee(refund)} initiated.`, 'info');
+  },
+  viewTicket(pnr) { const b = this.bookings.find(x => x.pnr === pnr); if (!b) return; this.renderConfirmation(b); this.navigate('confirmation'); },
+  checkPnr() {
+    const v = $('pnrInput').value.trim().toUpperCase(), b = this.bookings.find(x => x.pnr.toUpperCase() === v), o = $('pnrResult');
+    if (!b) { o.textContent = 'PNR not found in this browser\'s demo data.'; o.className = 'text-xs font-bold text-rose-600'; return; }
+    o.className = 'text-xs font-bold text-emerald-700';
+    o.textContent = b.status === 'cancelled' ? `${b.from} to ${b.to}: CANCELLED` : b.mode === 'train' ? `${b.trainNo} ${b.from} to ${b.to}, ${b.cls}: ${b.passengers.map(p => p.status).join(', ')}` : `${b.from} to ${b.to}: CONFIRMED, seats ${b.seats.join(', ')}`;
+  },
+
+  /* ---------- admin ---------- */
+  setAdminTab(t) { this.adminTab = t; this.renderAdmin(); },
+  renderAdmin() {
+    const conf = this.bookings.filter(b => b.status === 'confirmed'), rev = conf.reduce((s, b) => s + b.totalAmount, 0), nb = this.bookings.filter(b => b.mode === 'bus').length;
+    const K = [['Total Revenue', rupee(rev), 'Confirmed bookings only'], ['Total Bookings', this.bookings.length, `${nb} bus - ${this.bookings.length - nb} train`], ['Services', `${this.storedBuses().length} buses / ${this.allTrains().length} trains`, 'Plus auto-generated all-India buses'], ['Cities', CITY_NAMES.length, `${new Set(CITIES_RAW.map(c => c[1])).size} states & UTs`]];
+    $('adminKpis').innerHTML = K.map(k => `<div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm"><span class="text-xs font-black text-slate-400 uppercase tracking-wider">${k[0]}</span><h3 class="text-xl font-black text-slate-900 mt-1">${k[1]}</h3><p class="text-[11px] text-slate-500 mt-1">${k[2]}</p></div>`).join('');
+    const on = 'px-4 py-2 rounded-lg bg-brand-600 text-white', off = 'px-4 py-2 rounded-lg bg-slate-100 text-slate-600';
+    $('adminTabBus').className = this.adminTab === 'bus' ? on : off; $('adminTabTrain').className = this.adminTab === 'train' ? on : off;
+    if (this.adminTab === 'bus') {
+      $('adminTableTitle').textContent = 'Featured Bus Fleet'; $('adminTableNote').textContent = 'Search also auto-generates sample buses for every city pair';
+      $('adminThead').innerHTML = '<tr><th class="px-6 py-3">Operator / Bus</th><th class="px-6 py-3">Route</th><th class="px-6 py-3">Schedule</th><th class="px-6 py-3">Fare</th><th class="px-6 py-3 text-right">Actions</th></tr>';
+      $('adminTbody').innerHTML = this.storedBuses().map(b => { const a = this.busArrival(b); return `<tr class="hover:bg-slate-50"><td class="px-6 py-4"><span class="font-black text-slate-900 block">${esc(b.operator)}</span><span class="text-[11px] text-slate-400">${b.type} &bull; ${esc(b.busNumber)}</span></td><td class="px-6 py-4">${b.from} &rarr; ${b.to}</td><td class="px-6 py-4">${b.departureTime} - ${a.time}${a.plus ? ' (+' + a.plus + 'd)' : ''}<span class="block text-[11px] text-slate-400">${fmtMin(b.durMin)}</span></td><td class="px-6 py-4 font-mono font-bold">${rupee(b.price)}</td><td class="px-6 py-4 text-right"><button onclick="app.deleteBus('${b.id}')" class="text-rose-600 p-1.5 rounded-lg hover:bg-rose-50"><i data-lucide="trash-2" class="w-4 h-4"></i></button></td></tr>`; }).join('');
+    } else {
+      $('adminTableTitle').textContent = 'Train Timetable'; $('adminTableNote').textContent = 'Sample timetable - verify real data on IRCTC';
+      $('adminThead').innerHTML = '<tr><th class="px-6 py-3">Train</th><th class="px-6 py-3">Route</th><th class="px-6 py-3">Departs / Duration</th><th class="px-6 py-3">Classes</th><th class="px-6 py-3">Runs</th><th class="px-6 py-3 text-right">Actions</th></tr>';
+      $('adminTbody').innerHTML = this.allTrains().map(t => { const f = t.stops[0], l = t.stops[t.stops.length - 1]; return `<tr class="hover:bg-slate-50"><td class="px-6 py-3"><span class="font-black text-slate-900 block">${esc(t.name)}</span><span class="text-[11px] text-slate-400">${t.no} &bull; ${t.type}</span></td><td class="px-6 py-3">${f.city} &rarr; ${l.city}<span class="block text-[11px] text-slate-400">${t.stops.length} stops</span></td><td class="px-6 py-3">${minToTime(t.dep)}<span class="block text-[11px] text-slate-400">${fmtMin(l.off)}</span></td><td class="px-6 py-3">${t.classes.join(', ')}</td><td class="px-6 py-3 font-mono">${t.days === '1111111' ? 'Daily' : DAY_NAMES.filter((d, k) => t.days[k] === '1').join(' ')}</td><td class="px-6 py-3 text-right">${t.custom ? `<button onclick="app.deleteTrain('${t.no}')" class="text-rose-600 p-1.5 rounded-lg hover:bg-rose-50"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : '<span class="text-slate-300">built-in</span>'}</td></tr>`; }).join('');
+    }
+    if (window.lucide) lucide.createIcons();
+  },
+  openAddBusModal() { this.openModal('addBusModal'); },
+  openAddTrainModal() { this.openModal('addTrainModal'); },
+  handleNewBusSubmit(e) {
+    e.preventDefault(); const from = $('adminBusFrom').value, to = $('adminBusTo').value;
+    if (from === to) { this.showToast('Choose two different cities', 'error'); return; }
+    const type = $('adminBusType').value, sl = BUS_TYPES[type].kind === 'sleeper';
+    this.customBuses.push({ id: 'C' + Date.now().toString(36), custom: true, operator: $('adminBusOperator').value.trim(), busNumber: `${STATE_CODE[CITY[from].state] || 'IN'}-${10 + Math.floor(Math.random() * 89)}-X-${1000 + Math.floor(Math.random() * 8999)}`, type, from, to, departureTime: $('adminBusDep').value, durMin: Math.round(parseFloat($('adminBusDur').value) * 60), boardingPoint: `${from} Central Terminal`, droppingPoint: `${to} Bus Terminal`, price: parseFloat($('adminBusFare').value), rating: 4.5, reviewsCount: 1, amenities: ['wifi', 'charging', 'water', 'track'], bookedSeats: [], femaleSeats: sl ? ['L1', 'U1'] : ['1A', '1B'] });
+    this.saveState(); this.renderAdmin(); this.closeModal('addBusModal'); this.showToast(`Bus added for ${from} → ${to}`, 'success');
+  },
+  handleNewTrainSubmit(e) {
+    e.preventDefault(); const from = $('adminTrFrom').value, to = $('adminTrTo').value, no = $('adminTrNo').value.trim();
+    if (from === to) { this.showToast('Choose two different cities', 'error'); return; }
+    if (this.allTrains().some(t => t.no === no)) { this.showToast('A train with this number already exists', 'error'); return; }
+    const classes = Array.from(document.querySelectorAll('input[name="adminTrCls"]:checked')).map(x => x.value); if (!classes.length) { this.showToast('Pick at least one class', 'error'); return; }
+    this.customTrains.push({ no, name: $('adminTrName').value.trim(), type: $('adminTrType').value, dep: toMin($('adminTrDep').value), days: '1111111', classes, stops: [{ city: from, off: 0 }, { city: to, off: Math.round(parseFloat($('adminTrDur').value) * 60) }], custom: true });
+    this.saveState(); this.adminTab = 'train'; this.renderAdmin(); this.closeModal('addTrainModal'); this.showToast(`Train ${no} added`, 'success');
+  },
+  deleteBus(id) { const c = this.customBuses.findIndex(b => b.id === id); if (c > -1) this.customBuses.splice(c, 1); else this.hiddenBuses.push(id); this.saveState(); this.renderAdmin(); this.showToast('Bus removed from featured fleet', 'info'); },
+  deleteTrain(no) { this.customTrains = this.customTrains.filter(t => t.no !== no); this.saveState(); this.renderAdmin(); this.showToast('Train removed', 'info'); },
+
+  /* ---------- auth ---------- */
+  openAuthModal(m = 'login') { this.setAuthTab(m); this.openModal('authModal'); },
+  setAuthTab(tab) {
+    const on = 'pb-3 flex-1 border-b-2 border-brand-600 text-brand-600', off = 'pb-3 flex-1 border-b-2 border-transparent text-slate-400';
+    $('authTabLogin').className = tab === 'login' ? on : off; $('authTabSignup').className = tab === 'signup' ? on : off;
+    $('authLoginForm').classList.toggle('hidden', tab !== 'login'); $('authSignupForm').classList.toggle('hidden', tab !== 'signup');
+  },
+  handleAuthSubmit(e, type) {
+    e.preventDefault();
+    if (type === 'login') { const id = $('loginIdentifier').value; this.currentUser = { name: id.split('@')[0] || 'Traveler', email: id.includes('@') ? id : '', phone: id.includes('@') ? '' : id }; this.showToast(`Welcome back, ${this.currentUser.name}!`, 'success'); }
+    else { this.currentUser = { name: $('signupName').value, email: $('signupEmail').value, phone: $('signupPhone').value }; this.showToast('Account created (demo). Welcome!', 'success'); }
+    this.saveState(); this.updateAuthUi(); this.closeModal('authModal');
+  },
+  logout() { this.currentUser = null; this.saveState(); this.updateAuthUi(); this.showToast('Logged out', 'info'); },
+  updateAuthUi() {
+    const u = this.currentUser;
+    const html = u ? `<div class="flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-black text-xs">${esc((u.name || '?').charAt(0).toUpperCase())}</div><div class="hidden lg:flex flex-col text-left"><span class="text-xs font-black text-slate-800 leading-tight">${esc(u.name)}</span><span class="text-[10px] text-slate-400">Traveler</span></div><button onclick="app.logout()" class="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-100 font-bold">Logout</button></div>`
+      : `<button onclick="app.openAuthModal('login')" class="px-4 py-2 text-xs font-black text-slate-700 hover:text-brand-600">Login</button><button onclick="app.openAuthModal('signup')" class="px-4 py-2 text-xs font-black text-white bg-brand-600 hover:bg-brand-700 rounded-xl">Sign Up</button>`;
+    $('userAuthSection').innerHTML = html; $('mobileAuthContainer').innerHTML = html;
+  }
+});
+
+let app;
+window.addEventListener('DOMContentLoaded', () => { app = new MakeMyJourneyApp(); window.app = app; });
+</script>
+</body>
+</html>
